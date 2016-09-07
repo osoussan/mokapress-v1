@@ -15,6 +15,10 @@ endif()
 
 set(client_UI
     accountsettings.ui
+    createweb.ui
+    infofiledialog.ui
+    infodirdialog.ui
+    debugdialog.ui
     folderwizardsourcepage.ui
     folderwizardtargetpage.ui
     generalsettings.ui
@@ -36,6 +40,10 @@ set(client_UI
 qt_wrap_ui(client_UI_SRCS ${client_UI})
 
 set(client_SRCS
+    debugdialog.cpp
+    infofiledialog.cpp
+    createweb.cpp
+    infodirdialog.cpp
     accountsettings.cpp
     application.cpp
     folder.cpp
@@ -243,7 +251,7 @@ set_target_properties( ${APPLICATION_EXECUTABLE} PROPERTIES
 )
 # Only relevant for Linux? On OS X it by default properly checks in the bundle directory next to the exe
 set_target_properties( ${APPLICATION_EXECUTABLE} PROPERTIES
-	INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${LIB_INSTALL_DIR}/${APPLICATION_EXECUTABLE}" )
+	INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${LIB_INSTALL_DIR}" )
 
 target_link_libraries( ${APPLICATION_EXECUTABLE} ${QT_LIBRARIES} )
 target_link_libraries( ${APPLICATION_EXECUTABLE} ${synclib_NAME} )

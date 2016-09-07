@@ -43,6 +43,7 @@ namespace OCC {
 
 AbstractNetworkJob::AbstractNetworkJob(AccountPtr account, const QString &path, QObject *parent)
     : QObject(parent)
+    , _duration(0)
     , _timedout(false)
     , _followRedirects(false)
     , _ignoreCredentialFailure(false)
@@ -306,12 +307,8 @@ MkColJob::MkColJob(AccountPtr account, const QString &path, QObject *parent)
 
 void MkColJob::start()
 {
-   // add 'Content-Length: 0' header (see https://github.com/owncloud/client/issues/3256)
-   QNetworkRequest req;
-   req.setRawHeader("Content-Length", "0");
-
-   // assumes ownership
-   QNetworkReply *reply = davRequest("MKCOL", path(), req);
+    // assumes ownership
+   QNetworkReply *reply = davRequest("MKCOL", path());
    setReply(reply);
    setupConnections(reply);
    AbstractNetworkJob::start();
@@ -353,7 +350,7 @@ LsColXMLParser::LsColXMLParser()
 
 }
 
-bool LsColXMLParser::parse( const QByteArray& xml, QHash<QString, qint64> *sizes, const QString& expectedPath)
+bool LsColXMLParser::parse( const QByteArray& xml, QHash<QString, qint64> *sizes)
 {
     // Parse DAV response
     QXmlStreamReader reader(xml);
@@ -374,14 +371,7 @@ bool LsColXMLParser::parse( const QByteArray& xml, QHash<QString, qint64> *sizes
         // Start elements with DAV:
         if (type == QXmlStreamReader::StartElement && reader.namespaceUri() == QLatin1String("DAV:")) {
             if (name == QLatin1String("href")) {
-                // We don't use URL encoding in our request URL (which is the expected path) (QNAM will do it for us)
-                // but the result will have URL encoding..
-                QString hrefString = QString::fromUtf8(QByteArray::fromPercentEncoding(reader.readElementText().toUtf8()));
-                if (!hrefString.startsWith(expectedPath)) {
-                    qDebug() << "Invalid href" << hrefString << "expected starting with" << expectedPath;
-                    return false;
-                }
-                currentHref = hrefString;
+                currentHref = QUrl::fromPercentEncoding(reader.readElementText().toUtf8());
             } else if (name == QLatin1String("response")) {
             } else if (name == QLatin1String("propstat")) {
                 insidePropstat = true;
@@ -530,8 +520,7 @@ bool LsColJob::finished()
         connect( &parser, SIGNAL(finishedWithoutError()),
                  this, SIGNAL(finishedWithoutError()) );
 
-        QString expectedPath = reply()->request().url().path(); // something like "/owncloud/remote.php/webdav/folder"
-        if( !parser.parse( reply()->readAll(), &_sizes, expectedPath ) ) {
+        if( !parser.parse( reply()->readAll(), &_sizes ) ) {
             // XML parse error
             emit finishedWithError(reply());
         }
@@ -851,31 +840,7 @@ bool JsonApiJob::finished()
     return true;
 }
 
-QString extractErrorMessage(const QByteArray& errorResponse)
-{
-    QXmlStreamReader reader(errorResponse);
-    reader.readNextStartElement();
-    if (reader.name() != "error") {
-        return QString::null;
-    }
 
-    while (!reader.atEnd() && reader.error() == QXmlStreamReader::NoError) {
-        reader.readNextStartElement();
-        if (reader.name() == QLatin1String("message")) {
-            return reader.readElementText();
-        }
-    }
-    return QString::null;
-}
 
-QString errorMessage(const QString& baseError, const QByteArray& body)
-{
-    QString msg = baseError;
-    QString extra = extractErrorMessage(body);
-    if (!extra.isEmpty()) {
-        msg += QString::fromLatin1(" (%1)").arg(extra);
-    }
-    return msg;
-}
 
 } // namespace OCC

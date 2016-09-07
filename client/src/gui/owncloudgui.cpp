@@ -17,9 +17,12 @@
 #include "folderman.h"
 #include "configfile.h"
 #include "utility.h"
+#include "createweb.h"
 #include "progressdispatcher.h"
 #include "owncloudsetupwizard.h"
 #include "sharedialog.h"
+#include "infofiledialog.h"
+#include "infodirdialog.h"
 #if defined(Q_OS_MAC)
 #    include "settingsdialogmac.h"
 #    include "macwindow.h" // qtmacgoodies
@@ -221,12 +224,7 @@ void ownCloudGui::slotComputeOverallSyncStatus()
             _tray->setToolTip(tr("Please sign in"));
             return;
         }
-        if (a->state() == AccountState::ServiceUnavailable) {
-            _tray->setIcon(Theme::instance()->folderOfflineIcon(true));
-            _tray->setToolTip(tr("Server is temporarily unavailable"));
-            return;
-        }
-        if (!a->isConnected()) {
+        if (!a->isConnectedOrMaintenance()) {
             _tray->setIcon(Theme::instance()->folderOfflineIcon(true));
             _tray->setToolTip(tr("Disconnected from server"));
             return;
@@ -289,6 +287,7 @@ void ownCloudGui::setupContextMenu()
 
     bool isConfigured = (a != 0);
     _actionOpenoC->setEnabled(isConfigured);
+    _actionOpenMyWeb->setEnabled(isConfigured);
     bool isConnected = false;
     if (isConfigured) {
         isConnected = a->isConnected();
@@ -307,6 +306,7 @@ void ownCloudGui::setupContextMenu()
         _tray->setContextMenu(_contextMenu.data());
     }
     _contextMenu->setTitle(Theme::instance()->appNameGUI() );
+     _contextMenu->addAction(_actionOpenMyWeb);
     _contextMenu->addAction(_actionOpenoC);
 
     int folderCnt = folderMan->map().size();
@@ -416,6 +416,8 @@ void ownCloudGui::setupActions()
 {
     _actionOpenoC = new QAction(tr("Open %1 in browser").arg(Theme::instance()->appNameGUI()), this);
     QObject::connect(_actionOpenoC, SIGNAL(triggered(bool)), SLOT(slotOpenOwnCloud()));
+    _actionOpenMyWeb  = new QAction(tr("Voir mon site web"), this);
+    QObject::connect(_actionOpenMyWeb, SIGNAL(triggered(bool)), SLOT(slotOpenMyWeb()));
     _actionQuota = new QAction(tr("Calculating quota..."), this);
     _actionQuota->setEnabled( false );
     _actionStatus = new QAction(tr("Unknown status"), this);
@@ -604,6 +606,15 @@ void ownCloudGui::slotOpenOwnCloud()
     }
 }
 
+void ownCloudGui::slotOpenMyWeb()
+{
+    auto account = AccountStateManager::instance()->accountState()->account();
+    if (AbstractCredentials *cred = account->credentials()) {
+        auto user = cred->user();
+        QDesktopServices::openUrl(QUrl(tr("http://users.mokapress.com/%1").arg(cred->user())));
+    }
+}
+
 void ownCloudGui::slotHelp()
 {
     QDesktopServices::openUrl(QUrl(Theme::instance()->helpUrl()));
@@ -616,6 +627,7 @@ void ownCloudGui::raiseDialog( QWidget *raiseWidget )
         raiseWidget->showNormal();
         raiseWidget->raise();
         raiseWidget->activateWindow();
+        raiseWidget->setFocus();
 
 #if defined(Q_OS_MAC)
         // viel hilft viel ;-)
@@ -646,6 +658,41 @@ void ownCloudGui::raiseDialog( QWidget *raiseWidget )
     }
 }
 
+void ownCloudGui::slotCreateWebPage(const QString &filePath, const QString &localPath)
+{
+    AccountPtr account = AccountManager::instance()->account();
+    if (!account) {
+        qDebug() << "Could not open info dialog because no account is configured";
+        return;
+    }
+    CreateWeb *w = new CreateWeb(account, filePath, localPath);
+    w->setWindowFlags(w->windowFlags() | Qt::WindowStaysOnTopHint);
+    raiseDialog(w);
+}
+
+void ownCloudGui::slotShowInfoDialog(const QString &infoPath, const QString &localPath)
+{
+    AccountPtr account = AccountManager::instance()->account();
+    if (!account) {
+        qDebug() << "Could not open info dialog because no account is configured";
+        return;
+    }
+    QFileInfo file = QFileInfo(localPath);
+    if (file.isFile())
+    {
+        InfoFileDialog *w = new InfoFileDialog(account, infoPath, localPath);
+        w->setWindowFlags(w->windowFlags() | Qt::WindowStaysOnTopHint);
+        raiseDialog(w);
+    }
+    else
+    {
+        InfoDirDialog  *w = new InfoDirDialog(account, infoPath, localPath);
+        w->setWindowFlags(w->windowFlags() | Qt::WindowStaysOnTopHint);
+        raiseDialog(w);
+    }
+//    w->getShares();
+//    w->setAttribute( Qt::WA_DeleteOnClose, true );
+}
 
 void ownCloudGui::slotShowShareDialog(const QString &sharePath, const QString &localPath, bool resharingAllowed)
 {

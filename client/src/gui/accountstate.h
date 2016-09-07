@@ -16,7 +16,6 @@
 #define ACCOUNTINFO_H
 
 #include <QByteArray>
-#include <QPointer>
 #include "utility.h"
 #include "connectionvalidator.h"
 
@@ -68,9 +67,9 @@ public:
         /// The account is successfully talking to the server.
         Connected,
 
-        /// There's a temporary problem with talking to the server,
-        /// don't bother the user too much and try again.
-        ServiceUnavailable,
+        /// The account is talking to the server, but the server is in
+        /// maintenance mode.
+        ServerMaintenance,
 
         /// Could not communicate with the server for some reason.
         /// We assume this may resolve itself over time and will try
@@ -101,7 +100,7 @@ public:
     void setSignedOut(bool signedOut);
 
     bool isConnected() const;
-    bool isConnectedOrTemporarilyUnavailable() const;
+    bool isConnectedOrMaintenance() const;
 
     QuotaInfo *quotaInfo();
 
@@ -129,7 +128,6 @@ private:
     ConnectionStatus _connectionStatus;
     QStringList _connectionErrors;
     bool _waitingForNewCredentials;
-    QPointer<ConnectionValidator> _connectionValidator;
 };
 
 }

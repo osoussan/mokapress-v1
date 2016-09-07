@@ -4,4 +4,3 @@ add_subdirectory(icons)
 if( UNIX AND NOT APPLE )
   add_subdirectory(nautilus)
 endif()
-

@@ -51,6 +51,7 @@ public:
   void setMultipleFoldersExist( bool exist );
   void setAuthType(WizardCommon::AuthType type);
 
+  void connectToUrl();
 public slots:
   void setErrorString( const QString&, bool retryHTTPonly );
   void setConfigExists(  bool );

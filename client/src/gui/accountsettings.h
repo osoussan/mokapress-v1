@@ -71,6 +71,7 @@ public slots:
     void setGeneralErrors( const QStringList& errors );
     void setFolderList( const Folder::Map& );
 
+    void slotShowDebugDialog();
 protected slots:
     void slotAddFolder();
     void slotAddFolder( Folder* );
@@ -83,7 +84,6 @@ protected slots:
     void slotOpenAccountWizard();
     void slotHideProgress();
     void slotSelectiveSync();
-    void slotForceRemoteDiscoveryOnFolders();
 
 private:
     QString shortenFilename( const QString& folder, const QString& file ) const;

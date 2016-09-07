@@ -114,10 +114,9 @@ void AccountState::setState(State state)
         } else if (oldState == SignedOut && _state == Disconnected) {
             checkConnectivity();
         }
-    }
 
-    // might not have changed but the underlying _connectionErrors might have
-    emit stateChanged(_state);
+        emit stateChanged(_state);
+    }
 }
 
 QString AccountState::stateString(State state)
@@ -130,8 +129,8 @@ QString AccountState::stateString(State state)
         return QLatin1String("Disconnected");
     case Connected:
         return QLatin1String("Connected");
-    case ServiceUnavailable:
-        return QLatin1String("ServiceUnavailable");
+    case ServerMaintenance:
+        return QLatin1String("ServerMaintenance");
     case NetworkError:
         return QLatin1String("NetworkError");
     case ConfigurationError:
@@ -159,9 +158,9 @@ bool AccountState::isConnected() const
     return _state == Connected;
 }
 
-bool AccountState::isConnectedOrTemporarilyUnavailable() const
+bool AccountState::isConnectedOrMaintenance() const
 {
-    return isConnected() || _state == ServiceUnavailable;
+    return isConnected() || _state == ServerMaintenance;
 }
 
 QuotaInfo *AccountState::quotaInfo()
@@ -175,12 +174,7 @@ void AccountState::checkConnectivity()
         return;
     }
 
-    if (_connectionValidator) {
-        qDebug() << "ConnectionValidator already running, ignoring";
-        return;
-    }
     ConnectionValidator * conValidator = new ConnectionValidator(account());
-    _connectionValidator = conValidator;
     connect(conValidator, SIGNAL(connectionResult(ConnectionValidator::Status,QStringList)),
             SLOT(slotConnectionValidatorResult(ConnectionValidator::Status,QStringList)));
     if (isConnected()) {
@@ -208,7 +202,6 @@ void AccountState::slotConnectionValidatorResult(ConnectionValidator::Status sta
         return;
     }
 
-    auto oldStatus = _connectionStatus;
     if (_connectionStatus != status) {
         qDebug() << "AccountState connection status change: "
                  << connectionStatusString(_connectionStatus) << "->"
@@ -220,9 +213,7 @@ void AccountState::slotConnectionValidatorResult(ConnectionValidator::Status sta
     switch (status)
     {
     case ConnectionValidator::Connected:
-        if (oldStatus != ConnectionValidator::Connected) {
-            setState(Connected);
-        }
+        setState(Connected);
         break;
     case ConnectionValidator::Undefined:
     case ConnectionValidator::NotConfigured:
@@ -243,8 +234,8 @@ void AccountState::slotConnectionValidatorResult(ConnectionValidator::Status sta
     case ConnectionValidator::UserCanceledCredentials:
         setState(SignedOut);
         break;
-    case ConnectionValidator::ServiceUnavailable:
-        setState(ServiceUnavailable);
+    case ConnectionValidator::ServerMaintenance:
+        setState(ServerMaintenance);
         break;
     case ConnectionValidator::Timeout:
         setState(NetworkError);
@@ -270,12 +261,6 @@ void AccountState::slotCredentialsFetched(AbstractCredentials* credentials)
         // User canceled the connection or did not give a password
         setState(SignedOut);
         return;
-    }
-
-    // When new credentials become available we always want to restart the
-    // connection validation, even if it's currently running.
-    if (_connectionValidator) {
-        delete _connectionValidator;
     }
 
     checkConnectivity();

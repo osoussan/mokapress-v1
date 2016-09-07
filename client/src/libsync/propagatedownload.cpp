@@ -12,7 +12,6 @@
  * for more details.
  */
 
-#include "config.h"
 #include "owncloudpropagator_p.h"
 #include "propagatedownload.h"
 #include "networkjobs.h"
@@ -22,8 +21,6 @@
 #include "utility.h"
 #include "filesystem.h"
 #include "propagatorjobs.h"
-#include "transmissionchecksumvalidator.h"
-
 #include <json.h>
 #include <QNetworkAccessManager>
 #include <QFileInfo>
@@ -32,30 +29,6 @@
 #include <cmath>
 
 namespace OCC {
-
-// Always coming in with forward slashes.
-// In csync_excluded_no_ctx we ignore all files with longer than 254 chars
-// This function also adds a dot at the begining of the filename to hide the file on OS X and Linux
-QString OWNCLOUDSYNC_EXPORT createDownloadTmpFileName(const QString &previous) {
-    QString tmpFileName;
-    QString tmpPath;
-    int slashPos = previous.lastIndexOf('/');
-    // work with both pathed filenames and only filenames
-    if (slashPos == -1) {
-        tmpFileName = previous;
-        tmpPath = QString();
-    } else {
-        tmpFileName = previous.mid(slashPos+1);
-        tmpPath = previous.left(slashPos);
-    }
-    int overhead =  1 + 1 + 2 + 8; // slash dot dot-tilde ffffffff"
-    int spaceForFileName = qMin(254, tmpFileName.length() + overhead) - overhead;
-    if (tmpPath.length() > 0) {
-        return tmpPath + '/' + '.' + tmpFileName.left(spaceForFileName) + ".~" + (QString::number(uint(qrand() % 0xFFFFFFFF), 16));
-    } else {
-        return '.' + tmpFileName.left(spaceForFileName) + ".~" + (QString::number(uint(qrand() % 0xFFFFFFFF), 16));
-    }
-}
 
 // DOES NOT take owncership of the device.
 GETFileJob::GETFileJob(AccountPtr account, const QString& path, QFile *device,
@@ -334,7 +307,12 @@ void PropagateDownloadFileQNAM::start()
     }
 
     if (tmpFileName.isEmpty()) {
-        tmpFileName = createDownloadTmpFileName(_item._file);
+        tmpFileName = _item._file;
+        //add a dot at the begining of the filename to hide the file.
+        int slashPos = tmpFileName.lastIndexOf('/');
+        tmpFileName.insert(slashPos+1, '.');
+        //add the suffix
+        tmpFileName += ".~" + QString::number(uint(qrand()), 16);
     }
 
     _tmpFile.setFileName(_propagator->getFilePath(tmpFileName));
@@ -486,21 +464,7 @@ void PropagateDownloadFileQNAM::slotGetFinished()
         return;
     }
 
-    // Do checksum validation for the download. If there is no checksum header, the validator
-    // will also emit the validated() signal to continue the flow in slot downloadFinished()
-    // as this is (still) also correct.
-    TransmissionChecksumValidator *validator = new TransmissionChecksumValidator(_tmpFile.fileName(), this);
-    connect(validator, SIGNAL(validated(QByteArray)), this, SLOT(downloadFinished()));
-    connect(validator, SIGNAL(validationFailed(QString)), this, SLOT(slotChecksumFail(QString)));
-    validator->downloadValidation(job->reply()->rawHeader(checkSumHeaderC));
-
-}
-
-void PropagateDownloadFileQNAM::slotChecksumFail( const QString& errMsg )
-{
-    _tmpFile.remove();
-    _propagator->_anotherSyncNeeded = true;
-    done(SyncFileItem::SoftError, errMsg ); // tr("The file downloaded with a broken checksum, will be redownloaded."));
+    downloadFinished();
 }
 
 QString makeConflictFileName(const QString &fn, const QDateTime &dt)
@@ -523,52 +487,6 @@ QString makeConflictFileName(const QString &fn, const QDateTime &dt)
 
     return conflictFileName;
 }
-
-
-namespace { // Anonymous namespace for the recall feature
-static QString makeRecallFileName(const QString &fn)
-{
-    QString recallFileName(fn);
-    // Add _recall-XXXX  before the extention.
-    int dotLocation = recallFileName.lastIndexOf('.');
-    // If no extention, add it at the end  (take care of cases like foo/.hidden or foo.bar/file)
-    if (dotLocation <= recallFileName.lastIndexOf('/') + 1) {
-        dotLocation = recallFileName.size();
-    }
-
-    QString timeString = QDateTime::currentDateTime().toString("yyyyMMdd-hhmmss");
-    recallFileName.insert(dotLocation, "_.sys.admin#recall#-" + timeString);
-
-    return recallFileName;
-}
-
-static void handleRecallFile(const QString &fn)
-{
-    qDebug() << "handleRecallFile: " << fn;
-
-    FileSystem::setFileHidden(fn, true);
-
-    QFile file(fn);
-    if (!file.open(QIODevice::ReadOnly)) {
-        qWarning() << "Could not open recall file" << file.errorString();
-        return;
-    }
-    QFileInfo existingFile(fn);
-    QDir thisDir = existingFile.dir();
-
-    while (!file.atEnd()) {
-        QByteArray line = file.readLine();
-        line.chop(1); // remove trailing \n
-        QString fpath = thisDir.filePath(line);
-        QString rpath = makeRecallFileName(fpath);
-
-        // if previously recalled file exists then remove it (copy will not overwrite it)
-        QFile(rpath).remove();
-        qDebug() << "Copy recall file: " << fpath << " -> " << rpath;
-        QFile::copy(fpath,rpath);
-    }
-}
-} // end namespace
 
 void PropagateDownloadFileQNAM::downloadFinished()
 {
@@ -594,7 +512,11 @@ void PropagateDownloadFileQNAM::downloadFinished()
             done(SyncFileItem::SoftError, renameError);
             return;
         }
-        qDebug() << "Created conflict file" << fn << "->" << conflictFileName;
+    }
+
+    QFileInfo existingFile(fn);
+    if(FileSystem::fileExists(fn) && existingFile.permissions() != _tmpFile.permissions()) {
+        _tmpFile.setPermissions(existingFile.permissions());
     }
 
     FileSystem::setModTime(_tmpFile.fileName(), _item._modtime);
@@ -602,32 +524,11 @@ void PropagateDownloadFileQNAM::downloadFinished()
     // Accuracy, and we really need the time from the file system. (#3103)
     _item._modtime = FileSystem::getModTime(_tmpFile.fileName());
 
-    if (FileSystem::fileExists(fn)) {
-        // Preserve the existing file permissions.
-        QFileInfo existingFile(fn);
-        if (existingFile.permissions() != _tmpFile.permissions()) {
-            _tmpFile.setPermissions(existingFile.permissions());
-        }
-
-        // Check whether the existing file has changed since the discovery
-        // phase by comparing size and mtime to the previous values. This
-        // is necessary to avoid overwriting user changes that happened between
-        // the discovery phase and now.
-        const qint64 expectedSize = _item.log._other_size;
-        const time_t expectedMtime = _item.log._other_modtime;
-        if (! FileSystem::verifyFileUnchanged(fn, expectedSize, expectedMtime)) {
-            _propagator->_anotherSyncNeeded = true;
-            done(SyncFileItem::SoftError, tr("File has changed since discovery"));
-            return;
-        }
-    }
-
     QString error;
     _propagator->addTouchedFile(fn);
-    // The fileChanged() check is done above to generate better error messages.
-    if (!FileSystem::uncheckedRenameReplace(_tmpFile.fileName(), fn, &error)) {
+    FileSystem::setFileHidden(_tmpFile.fileName(), false);
+    if (!FileSystem::renameReplace(_tmpFile.fileName(), fn, &error)) {
         qDebug() << Q_FUNC_INFO << QString("Rename failed: %1 => %2").arg(_tmpFile.fileName()).arg(fn);
-
         // If we moved away the original file due to a conflict but can't
         // put the downloaded file in its place, we are in a bad spot:
         // If we do nothing the next sync run will assume the user deleted
@@ -639,12 +540,10 @@ void PropagateDownloadFileQNAM::downloadFinished()
             _propagator->_journal->deleteFileRecord(fn);
             _propagator->_journal->commit("download finished");
         }
-
         _propagator->_anotherSyncNeeded = true;
         done(SyncFileItem::SoftError, error);
         return;
     }
-    FileSystem::setFileHidden(fn, false);
 
     // Maybe we downloaded a newer version of the file than we thought we would...
     // Get up to date information for the journal.
@@ -654,11 +553,6 @@ void PropagateDownloadFileQNAM::downloadFinished()
     _propagator->_journal->setDownloadInfo(_item._file, SyncJournalDb::DownloadInfo());
     _propagator->_journal->commit("download file start2");
     done(isConflict ? SyncFileItem::Conflict : SyncFileItem::Success);
-
-    // handle the special recall file
-    if(_item._file == QLatin1String(".sys.admin#recall#") || _item._file.endsWith("/.sys.admin#recall#")) {
-        handleRecallFile(fn);
-    }
 }
 
 void PropagateDownloadFileQNAM::slotDownloadProgress(qint64 received, qint64)

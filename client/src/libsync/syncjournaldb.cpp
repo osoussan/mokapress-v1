@@ -15,6 +15,7 @@
 #include <QStringList>
 #include <QDebug>
 #include <QElapsedTimer>
+#include <QDir>
 #include "ownsql.h"
 
 #include <inttypes.h>
@@ -30,15 +31,20 @@
 namespace OCC {
 
 SyncJournalDb::SyncJournalDb(const QString& path, QObject *parent) :
-    QObject(parent), _transaction(0)
+    QObject(parent), _transaction(0), _possibleUpgradeFromMirall_1_5(false), _possibleUpgradeFromMirall_1_8_0(false)
 {
 
     _dbFile = path;
+    _configFile = path;
     if( !_dbFile.endsWith('/') ) {
         _dbFile.append('/');
     }
     _dbFile.append(".csync_journal.db");
 
+    if( !_configFile.endsWith('/') ) {
+        _configFile.append('/');
+    }
+     _configFile.append(".config");
 
 }
 
@@ -272,14 +278,15 @@ bool SyncJournalDb::checkConnect()
         return sqlFail("Create table version", createQuery);
     }
 
-    bool forceRemoteDiscovery = false;
+    _possibleUpgradeFromMirall_1_5 = false;
+    _possibleUpgradeFromMirall_1_8_0 = false;
 
     SqlQuery versionQuery("SELECT major, minor, patch FROM version;", _db);
     if (!versionQuery.next()) {
         // If there was no entry in the table, it means we are likely upgrading from 1.5
         if (!isNewDb) {
-            qDebug() << Q_FUNC_INFO << "possibleUpgradeFromMirall_1_5 detected!";
-            forceRemoteDiscovery = true;
+            qDebug() << Q_FUNC_INFO << "_possibleUpgradeFromMirall_1_5 detected!";
+            _possibleUpgradeFromMirall_1_5 = true;
         }
         createQuery.prepare("INSERT INTO version VALUES (?1, ?2, ?3, ?4);");
         createQuery.bindValue(1, MIRALL_VERSION_MAJOR);
@@ -293,9 +300,9 @@ bool SyncJournalDb::checkConnect()
         int minor = versionQuery.intValue(1);
         int patch = versionQuery.intValue(2);
 
-        if( major == 1 && minor == 8 && (patch == 0 || patch == 1) ) {
-            qDebug() << Q_FUNC_INFO << "possibleUpgradeFromMirall_1_8_0_or_1 detected!";
-            forceRemoteDiscovery = true;
+        if( major == 1 && minor == 8 && patch  == 0 ) {
+            qDebug() << Q_FUNC_INFO << "_possibleUpgradeFromMirall_1_8_0 detected!";
+            _possibleUpgradeFromMirall_1_8_0 = true;
         }
         // Not comparing the BUILD id here, correct?
         if( !(major == MIRALL_VERSION_MAJOR && minor == MIRALL_VERSION_MINOR && patch == MIRALL_VERSION_PATCH) ) {
@@ -320,18 +327,6 @@ bool SyncJournalDb::checkConnect()
     bool rc = updateDatabaseStructure();
     if( !rc ) {
         qDebug() << "WARN: Failed to update the database structure!";
-    }
-
-    /*
-     * If we are upgrading from a client version older than 1.5 is found,
-     * we cannot read from the database because we need to fetch the files id and etags.
-     *
-     *  If 1.8.0 caused missing data in the local tree, so we also don't read from DB
-     *  to get back the files that were gone.
-     *  In 1.8.1 we had a fix to re-get the data, but this one here is better
-     */
-    if (forceRemoteDiscovery) {
-        forceRemoteDiscoveryNextSyncLocked();
     }
 
     _getFileRecordQuery.reset(new SqlQuery(_db));
@@ -393,9 +388,22 @@ bool SyncJournalDb::checkConnect()
     commitInternal(QString("checkConnect End"), false);
 
     // Hide 'em all!
+    #ifdef Q_OS_WIN
+    const QDir fi( _configFile );
+    fi.mkpath( _configFile );
+    std::string tmp = _configFile.toStdString();
+    const char *orig = tmp.c_str();
+    size_t origsize = strlen(orig) + 1;
+    const size_t newsize = 100;
+    size_t convertedChars = 0;
+    wchar_t wcstring[newsize];
+        mbstowcs_s(&convertedChars, wcstring, origsize, orig, _TRUNCATE);
+        auto verif = SetFileAttributes(wcstring, FILE_ATTRIBUTE_HIDDEN);
+    #endif
     FileSystem::setFileHidden(databaseFilePath(), true);
     FileSystem::setFileHidden(databaseFilePath() + "-wal", true);
     FileSystem::setFileHidden(databaseFilePath() + "-shm", true);
+    FileSystem::setFileHidden(databaseFilePath() + "-journal", true);
     FileSystem::setFileHidden(databaseFilePath() + "-journal", true);
 
     return rc;
@@ -420,6 +428,7 @@ void SyncJournalDb::close()
     _deleteFileRecordRecursively.reset(0);
     _getErrorBlacklistQuery.reset(0);
     _setErrorBlacklistQuery.reset(0);
+    _possibleUpgradeFromMirall_1_5 = false;
 
     _db.close();
     _avoidReadFromDbOnNextSyncFilter.clear();
@@ -764,6 +773,14 @@ bool SyncJournalDb::postSyncCleanup(const QSet<QString>& filepathsToKeep,
 
     // Incoroporate results back into main DB
     walCheckpoint();
+
+    if (_possibleUpgradeFromMirall_1_5) {
+        _possibleUpgradeFromMirall_1_5 = false; // should be handled now
+    }
+
+    if (_possibleUpgradeFromMirall_1_8_0) {
+        _possibleUpgradeFromMirall_1_8_0 = false; // should be handled now
+    }
 
     return true;
 }
@@ -1157,10 +1174,11 @@ void SyncJournalDb::wipeErrorBlacklistEntry( const QString& file )
 
 void SyncJournalDb::updateErrorBlacklistEntry( const SyncJournalErrorBlacklistRecord& item )
 {
-    QMutexLocker locker(&_mutex);
     if( !checkConnect() ) {
         return;
     }
+
+    QMutexLocker locker(&_mutex);
 
     _setErrorBlacklistQuery->bindValue(1, item._file);
     _setErrorBlacklistQuery->bindValue(2, item._lastTryEtag);
@@ -1288,30 +1306,6 @@ void SyncJournalDb::avoidReadFromDbOnNextSync(const QString& fileName)
     _avoidReadFromDbOnNextSyncFilter.append(fileName);
 }
 
-void SyncJournalDb::forceRemoteDiscoveryNextSync()
-{
-    QMutexLocker locker(&_mutex);
-
-    if( !checkConnect() ) {
-        return;
-    }
-
-    forceRemoteDiscoveryNextSyncLocked();
-}
-
-void SyncJournalDb::forceRemoteDiscoveryNextSyncLocked()
-{
-    qDebug() << "Forcing remote re-discovery by deleting folder Etags";
-    SqlQuery deleteRemoteFolderEtagsQuery(_db);
-    deleteRemoteFolderEtagsQuery.prepare("UPDATE metadata SET md5='_invalid_' WHERE type=2;");
-    if( !deleteRemoteFolderEtagsQuery.exec() ) {
-        qDebug() << "ERROR: Query failed" << deleteRemoteFolderEtagsQuery.error();
-    } else {
-        qDebug() << "Cleared" << deleteRemoteFolderEtagsQuery.numRowsAffected() << "folder ETags";
-    }
-}
-
-
 void SyncJournalDb::commit(const QString& context, bool startTrans)
 {
     QMutexLocker lock(&_mutex);
@@ -1348,6 +1342,20 @@ bool SyncJournalDb::isConnected()
 {
     QMutexLocker lock(&_mutex);
     return checkConnect();
+}
+
+bool SyncJournalDb::isUpdateFrom_1_5()
+{
+    QMutexLocker lock(&_mutex);
+    checkConnect();
+    return _possibleUpgradeFromMirall_1_5;
+}
+
+bool SyncJournalDb::isUpdateFrom_1_8_0()
+{
+    QMutexLocker lock(&_mutex);
+    checkConnect();
+    return _possibleUpgradeFromMirall_1_8_0;
 }
 
 bool operator==(const SyncJournalDb::DownloadInfo & lhs,

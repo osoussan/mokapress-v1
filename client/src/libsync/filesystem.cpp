@@ -16,13 +16,7 @@
 #include "utility.h"
 #include <QFile>
 #include <QFileInfo>
-#include <QCoreApplication>
 #include <QDebug>
-#include <QCryptographicHash>
-
-#ifdef ZLIB_FOUND
-#include <zlib.h>
-#endif
 
 #if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)
 #include <qabstractfileengine.h>
@@ -161,50 +155,7 @@ bool FileSystem::rename(const QString &originFileName,
     return success;
 }
 
-bool FileSystem::fileChanged(const QString& fileName,
-                             qint64 previousSize,
-                             time_t previousMtime)
-{
-    return getSize(fileName) != previousSize
-        || getModTime(fileName) != previousMtime;
-}
-
-bool FileSystem::verifyFileUnchanged(const QString& fileName,
-                                     qint64 previousSize,
-                                     time_t previousMtime)
-{
-    const qint64 actualSize = getSize(fileName);
-    const time_t actualMtime = getModTime(fileName);
-    if (actualSize != previousSize || actualMtime != previousMtime) {
-        qDebug() << "File" << fileName << "has changed:"
-                 << "size: " << previousSize << "<->" << actualSize
-                 << ", mtime: " << previousMtime << "<->" << actualMtime;
-        return false;
-    }
-    return true;
-}
-
-bool FileSystem::renameReplace(const QString& originFileName,
-                               const QString& destinationFileName,
-                               qint64 destinationSize,
-                               time_t destinationMtime,
-                               QString* errorString)
-{
-    if (fileExists(destinationFileName)
-            && fileChanged(destinationFileName, destinationSize, destinationMtime)) {
-        if (errorString) {
-            *errorString = qApp->translate("FileSystem",
-                    "The destination file has an unexpected size or modification time");
-        }
-        return false;
-    }
-
-    return uncheckedRenameReplace(originFileName, destinationFileName, errorString);
-}
-
-bool FileSystem::uncheckedRenameReplace(const QString& originFileName,
-                                        const QString& destinationFileName,
-                                        QString* errorString)
+bool FileSystem::renameReplace(const QString& originFileName, const QString& destinationFileName, QString* errorString)
 {
 #ifndef Q_OS_WIN
     bool success;
@@ -274,6 +225,7 @@ bool FileSystem::openAndSeekFileSharedRead(QFile* file, QString* errorOrNull, qi
 
     // Create the file handle.
     SECURITY_ATTRIBUTES securityAtts = { sizeof(SECURITY_ATTRIBUTES), NULL, FALSE };
+    auto fileName = file->fileName();
     HANDLE fileHandle = CreateFileW(
             (const wchar_t*)file->fileName().utf16(),
             accessRights,
@@ -396,60 +348,6 @@ QString FileSystem::fileSystemForPath(const QString & path)
         return QString();
     }
     return QString::fromUtf16(reinterpret_cast<const ushort *>(fileSystemBuffer));
-}
-#endif
-
-#define BUFSIZE 1024*1024*10
-
-static QByteArray readToCrypto( const QString& filename, QCryptographicHash::Algorithm algo )
-{
-    const qint64 bufSize = BUFSIZE;
-    QByteArray buf(bufSize,0);
-    QByteArray arr;
-    QCryptographicHash crypto( algo );
-
-    QFile file(filename);
-    if (file.open(QIODevice::ReadOnly)) {
-        qint64 size;
-        while (!file.atEnd()) {
-            size = file.read( buf.data(), bufSize );
-            if( size > 0 ) {
-                crypto.addData(buf.data(), size);
-            }
-        }
-        arr = crypto.result().toHex();
-    }
-    return arr;
-}
-
-QByteArray FileSystem::calcMd5( const QString& filename )
-{
-    return readToCrypto( filename, QCryptographicHash::Md5 );
-}
-
-QByteArray FileSystem::calcSha1( const QString& filename )
-{
-    return readToCrypto( filename, QCryptographicHash::Sha1 );
-}
-
-#ifdef ZLIB_FOUND
-QByteArray FileSystem::calcAdler32( const QString& filename )
-{
-    unsigned int adler = adler32(0L, Z_NULL, 0);
-    const qint64 bufSize = BUFSIZE;
-    QByteArray buf(bufSize, 0);
-
-    QFile file(filename);
-    if (file.open(QIODevice::ReadOnly)) {
-        qint64 size;
-        while (!file.atEnd()) {
-            size = file.read(buf.data(), bufSize);
-            if( size > 0 )
-                adler = adler32(adler, (const Bytef*) buf.data(), size);
-        }
-    }
-
-    return QByteArray::number( adler, 16 );
 }
 #endif
 

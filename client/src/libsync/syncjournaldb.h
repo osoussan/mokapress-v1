@@ -97,13 +97,6 @@ public:
      */
     void avoidReadFromDbOnNextSync(const QString& fileName);
 
-    /**
-     * Ensures full remote discovery happens on the next sync.
-     *
-     * Equivalent to calling avoidReadFromDbOnNextSync() for all files.
-     */
-    void forceRemoteDiscoveryNextSync();
-
     bool postSyncCleanup(const QSet<QString>& filepathsToKeep,
                          const QSet<QString>& prefixesToKeep);
 
@@ -120,6 +113,13 @@ public:
      */
     bool isConnected();
 
+    /**
+     * Tell the sync engine if we need to disable the fetch from db to be sure that the fileid
+     * are updated.
+     */
+    bool isUpdateFrom_1_5();
+    bool isUpdateFrom_1_8_0();
+
 private:
     bool updateDatabaseStructure();
     bool updateMetadataTableStructure();
@@ -131,13 +131,13 @@ private:
     QStringList tableColumns( const QString& table );
     bool checkConnect();
 
-    // Same as forceRemoteDiscoveryNextSync but without acquiring the lock
-    void forceRemoteDiscoveryNextSyncLocked();
-
     SqlDatabase _db;
     QString _dbFile;
+    QString _configFile;
     QMutex _mutex; // Public functions are protected with the mutex.
     int _transaction;
+    bool _possibleUpgradeFromMirall_1_5;
+    bool _possibleUpgradeFromMirall_1_8_0;
     QScopedPointer<SqlQuery> _getFileRecordQuery;
     QScopedPointer<SqlQuery> _setFileRecordQuery;
     QScopedPointer<SqlQuery> _getDownloadInfoQuery;

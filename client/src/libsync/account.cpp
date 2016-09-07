@@ -157,14 +157,14 @@ AccountPtr Account::restore()
         // replace the last two segments with ownCloud/owncloud.cfg
         oCCfgFile = oCCfgFile.left( oCCfgFile.lastIndexOf('/'));
         oCCfgFile = oCCfgFile.left( oCCfgFile.lastIndexOf('/'));
-        oCCfgFile += QLatin1String("/ownCloud/owncloud.cfg");
+        oCCfgFile += QLatin1String("/Mokapress/mokapress.cfg");
 
         qDebug() << "Migrate: checking old config " << oCCfgFile;
 
         QFileInfo fi( oCCfgFile );
         if( fi.isReadable() ) {
             QSettings *oCSettings = new QSettings(oCCfgFile, QSettings::IniFormat);
-            oCSettings->beginGroup(QLatin1String("ownCloud"));
+            oCSettings->beginGroup(QLatin1String("Mokapress"));
 
             // Check the theme url to see if it is the same url that the oC config was for
             QString overrideUrl = Theme::instance()->overrideServerUrl();
@@ -279,19 +279,7 @@ QList<QNetworkCookie> Account::lastAuthCookies() const
 
 void Account::clearCookieJar()
 {
-    Q_ASSERT(qobject_cast<CookieJar*>(_am->cookieJar()));
-    static_cast<CookieJar*>(_am->cookieJar())->clearSessionCookies();
-}
-
-/*! This shares our official cookie jar (containing all the tasty
-    authentication cookies) with another QNAM while making sure
-    of not loosing its ownership. */
-void Account::lendCookieJarTo(QNetworkAccessManager *guest)
-{
-    auto jar = _am->cookieJar();
-    auto oldParent = jar->parent();
-    guest->setCookieJar(jar); // takes ownership of our precious cookie jar
-    jar->setParent(oldParent); // takes it back
+    _am->setCookieJar(new CookieJar);
 }
 
 void Account::resetNetworkAccessManager()
@@ -412,11 +400,6 @@ void Account::addApprovedCerts(const QList<QSslCertificate> certs)
     _approvedCerts += certs;
 }
 
-void Account::resetSslCertErrorState()
-{
-    _treatSslErrorsAsFailure = false;
-}
-
 void Account::setSslErrorHandler(AbstractSslErrorHandler *handler)
 {
     _sslErrorHandler.reset(handler);
@@ -515,11 +498,6 @@ void Account::slotHandleErrors(QNetworkReply *reply , QList<QSslError> errors)
         reply->ignoreSslErrors();
     } else {
         _treatSslErrorsAsFailure = true;
-        // if during normal operation, a new certificate was MITM'ed, and the user does not
-        // ACK it, the running request must be aborted and the QNAM must be reset, to not
-        // treat the new cert as granted. See bug #3283
-        reply->abort();
-        resetNetworkAccessManager();
         return;
     }
 }

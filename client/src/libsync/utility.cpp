@@ -15,7 +15,6 @@
 #include "utility.h"
 
 #include "version.h"
-#include "theme.h"
 
 // Note:  This file must compile without QtGui
 #include <QCoreApplication>
@@ -155,19 +154,10 @@ QString Utility::platform()
 
 QByteArray Utility::userAgentString()
 {
-    QString re = QString::fromLatin1("Mozilla/5.0 (%1) mirall/%2")
+    return QString::fromLatin1("Mozilla/5.0 (%1) mirall/%2")
             .arg(Utility::platform())
-            .arg(QLatin1String(MIRALL_VERSION_STRING));
-
-    const QString appName = Theme::instance()->appName();
-
-    // this constant "ownCloud" is defined in the default OEM theming
-    // that is used for the standard client. If it is changed there,
-    // it needs to be adjusted here.
-    if( appName != QLatin1String("ownCloud") ) {
-        re += QString(" (%1)").arg(appName);
-    }
-    return re.toLatin1();
+            .arg(QLatin1String(MIRALL_STRINGIFY(MIRALL_VERSION)))
+            .toLatin1();
 }
 
 bool Utility::hasLaunchOnStartup(const QString &appName)
@@ -411,12 +401,10 @@ void Utility::StopWatch::start()
     _timer.start();
 }
 
-quint64 Utility::StopWatch::stop()
+void Utility::StopWatch::stop()
 {
     addLapTime(QLatin1String(STOPWATCH_END_TAG));
-    quint64 duration = _timer.elapsed();
     _timer.invalidate();
-    return duration;
 }
 
 void Utility::StopWatch::reset()

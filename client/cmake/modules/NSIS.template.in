@@ -81,7 +81,7 @@ CRCCheck On
 SetCompressor @CPACK_NSIS_COMPRESSOR@
 RequestExecutionLevel user ;Now using the UAC plugin.
 ReserveFile NSIS.InstallOptions.ini
-ReserveFile "${NSISDIR}\Plugins\InstallOptions.dll"
+;ReserveFile "${NSISDIR}\Plugins\InstallOptions.dll"
 
 @CPACK_NSIS_SECTION_SELECTED_VARS@
 
@@ -125,6 +125,7 @@ ReserveFile "${NSISDIR}\Plugins\InstallOptions.dll"
    !define MUI_FINISHPAGE_SHOWREADME_TEXT $MUI_FINISHPAGE_SHOWREADME_TEXT_STRING
 !endif
 !ifdef OPTION_FINISHPAGE_LAUNCHER
+   !define MUI_FINISHPAGE_TEXT "Mokapress necessite un redemarrage pour fonctionner correctement."
    !define MUI_FINISHPAGE_NOAUTOCLOSE
    !define MUI_FINISHPAGE_RUN
    !define MUI_FINISHPAGE_RUN_FUNCTION "LaunchApplication"
@@ -175,11 +176,10 @@ VIAddVersionKey /LANG=${LANG_ENGLISH} "FileVersion" "${VERSION}"
       StrCmp $LANGUAGE ${LANG_ITALIAN} Italian 0
       StrCmp $LANGUAGE ${LANG_ESTONIAN} Estonian 0
       StrCmp $LANGUAGE ${LANG_GREEK} Greek 0
-      StrCmp $LANGUAGE ${LANG_BASQUE} Basque 0
-      StrCmp $LANGUAGE ${LANG_GALICIAN} Galician 0
-      StrCmp $LANGUAGE ${LANG_SLOVAC} Slovak 0
-      StrCmp $LANGUAGE ${LANG_TURKISH} Turkish 0
-      StrCmp $LANGUAGE ${LANG_NORWEGIAN} Norwegian 0
+      StrCmp $LANGUAGE ${LANG_GREEK} Basque 0
+      StrCmp $LANGUAGE ${LANG_GREEK} Galician 0
+      StrCmp $LANGUAGE ${LANG_GREEK} Slovak 0
+      StrCmp $LANGUAGE ${LANG_GREEK} Turkish 0
       StrCmp $LANGUAGE ${LANG_PORTUGUESEBR} Brazilian EndLanguageCmp
       German:
       !include "${source_path}/admin/win/nsi/l10n\German.nsh"
@@ -222,9 +222,6 @@ VIAddVersionKey /LANG=${LANG_ENGLISH} "FileVersion" "${VERSION}"
       Goto EndLanguageCmp
       Brazilian:
       !include "${source_path}/admin/win/nsi/l10n\PortugueseBR.nsh"
-      Goto EndLanguageCmp
-      Norwegian:
-      !include "${source_path}/admin/win/nsi/l10n\Norwegian.nsh"
       EndLanguageCmp:
 
    FunctionEnd
@@ -247,7 +244,7 @@ VIAddVersionKey /LANG=${LANG_ENGLISH} "FileVersion" "${VERSION}"
 ##############################################################################
 
 Function LaunchApplication
-   ${UAC.CallFunctionAsUser} LaunchApplicationAsUser
+    !insertmacro UAC_AsUser_Call Function LaunchApplicationAsUser ${UAC_SYNCREGISTERS}
 FunctionEnd
 
 Function LaunchApplicationAsUser
@@ -366,7 +363,7 @@ Function PageLeaveReinstall
       RMDir $INSTDIR
    no_remove_uninstaller:
       StrCmp $R0 "2" 0 +3
-      UAC::Unload
+      #UAC::Unload
       Quit
       BringToFront
    reinst_done:
@@ -380,7 +377,7 @@ FunctionEnd
 Section "${APPLICATION_NAME}" SEC_APPLICATION
    SectionIn 1 2 3 RO
    SetDetailsPrint listonly
-
+   SetRebootFlag true
    SetDetailsPrint textonly
    DetailPrint $SEC_APPLICATION_DETAILS
    SetDetailsPrint listonly
@@ -449,7 +446,7 @@ Section "${APPLICATION_NAME}" SEC_APPLICATION
    File "${MING_BIN}\libcrypto-10.dll"
    File "${MING_BIN}\libssl-10.dll"
    File "${MING_BIN}\libstdc++-6.dll"
-   File "${MING_BIN}\libwebp-5.dll"
+   File "${MING_BIN}\libwebp-4.dll"
    File "${MING_BIN}\libxslt-1.dll"
    File "${MING_BIN}\libxml2-2.dll"
    File "${MING_BIN}\zlib1.dll"
@@ -479,7 +476,6 @@ SectionEnd
       CreateDirectory "$INSTDIR\shellext"
       !define LIBRARY_COM
       !define LIBRARY_SHELL_EXTENSION
-      !define LIBRARY_IGNORE_VERSION
       ${If} ${RunningX64}
          !define LIBRARY_X64
          !insertmacro InstallLib DLL NOTSHARED REBOOT_PROTECTED "${SOURCE_PATH}\binary\shell_integration\windows\Release\x64\OCUtil_x64.dll" "$INSTDIR\shellext\OCUtil_x64.dll" "$INSTDIR\shellext"
@@ -493,7 +489,6 @@ SectionEnd
       ${Endif}
       !undef LIBRARY_COM
       !undef LIBRARY_SHELL_EXTENSION
-      !undef LIBRARY_IGNORE_VERSION
    ${MementoSectionEnd}
 !endif
 
@@ -583,7 +578,8 @@ Section -post
    WriteRegDWORD ${MEMENTO_REGISTRY_ROOT} "${MEMENTO_REGISTRY_KEY}" "NoModify" "1"
    WriteRegDWORD ${MEMENTO_REGISTRY_ROOT} "${MEMENTO_REGISTRY_KEY}" "NoRepair" "1"
 
-
+   
+   SetRebootFlag true
    SetDetailsPrint textonly
    DetailPrint $UNINSTALLER_FINISHED_Detail
 SectionEnd
@@ -652,7 +648,6 @@ Section Uninstall
    !ifdef OPTION_SECTION_SC_SHELL_EXT
       !define LIBRARY_COM
       !define LIBRARY_SHELL_EXTENSION
-      !define LIBRARY_IGNORE_VERSION
       ${If} ${HasSection} SEC_SHELL_EXT
         DetailPrint "Uninstalling x64 overlay DLLs"
         !define LIBRARY_X64
@@ -668,7 +663,6 @@ Section Uninstall
       ${EndIf}
       !undef LIBRARY_COM
       !undef LIBRARY_SHELL_EXTENSION
-      !undef LIBRARY_IGNORE_VERSION
   !endif
 
    ;Start menu shortcut
@@ -765,7 +759,7 @@ Function .onInit
    ${MementoSectionRestore}
 
    UAC_Elevate:
-      UAC::RunElevated
+      !insertmacro UAC_RunElevated
       StrCmp 1223 $0 UAC_ElevationAborted ; UAC dialog aborted by user?
       StrCmp 0 $0 0 UAC_Err ; Error?
       StrCmp 1 $1 0 UAC_Success ;Are we the real deal or just the wrapper?
@@ -785,7 +779,7 @@ Function .onInit
       goto UAC_Elevate
 
    ;Prevent multiple instances.
-   System::Call 'kernel32::CreateMutexA(i 0, i 0, t "${APPLICATION_SHORTNAME}Installer") i .r1 ?e'
+   System::Call 'kernel32::CreateMutexA(i 0, i 0, t "owncloudInstaller") i .r1 ?e'
    Pop $R0
    StrCmp $R0 0 +3
       MessageBox MB_OK|MB_ICONEXCLAMATION $INIT_INSTALLER_RUNNING
@@ -813,11 +807,11 @@ Function .onInstSuccess
    ${AndIf} $InstallRunIfSilent == "yes"
      Call LaunchApplication
    ${EndIf}
-   UAC::Unload ;Must call unload!
+   #UAC::Unload ;Must call unload!
 FunctionEnd
 
 Function .onInstFailed
-   UAC::Unload ;Must call unload!
+   #UAC::Unload ;Must call unload!
 FunctionEnd
 
 ##############################################################################
@@ -830,7 +824,7 @@ Function un.onInit
    Call un.SetLang
 
    UAC_Elevate:
-      UAC::RunElevated
+      !insertmacro UAC_RunElevated
       StrCmp 1223 $0 UAC_ElevationAborted ; UAC dialog aborted by user?
       StrCmp 0 $0 0 UAC_Err ; Error?
       StrCmp 1 $1 0 UAC_Success ;Are we the real deal or just the wrapper?
@@ -850,7 +844,7 @@ Function un.onInit
       goto UAC_Elevate
 
    ;Prevent multiple instances.
-   System::Call 'kernel32::CreateMutexA(i 0, i 0, t "${APPLICATION_SHORTNAME}Uninstaller") i .r1 ?e'
+   System::Call 'kernel32::CreateMutexA(i 0, i 0, t "owncloudUninstaller") i .r1 ?e'
    Pop $R0
    StrCmp $R0 0 +3
       MessageBox MB_OK|MB_ICONEXCLAMATION $INIT_UNINSTALLER_RUNNING
@@ -861,9 +855,9 @@ Function un.onInit
 FunctionEnd
 
 Function un.onUnInstSuccess
-   UAC::Unload ;Must call unload!
+   #UAC::Unload ;Must call unload!
 FunctionEnd
 
 Function un.onUnInstFailed
-   UAC::Unload ;Must call unload!
+   #UAC::Unload ;Must call unload!
 FunctionEnd

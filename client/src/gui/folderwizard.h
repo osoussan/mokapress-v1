@@ -32,7 +32,6 @@ class SelectiveSyncTreeView;
 class ownCloudInfo;
 
 class FormatWarningsWizardPage : public QWizardPage {
-    Q_OBJECT
 protected:
     QString formatWarnings(const QStringList &warnings) const;
 };

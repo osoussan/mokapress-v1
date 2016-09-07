@@ -46,9 +46,11 @@ public:
 	struct ContextMenuInfo {
 		std::vector<std::wstring> watchedDirectories;
 		std::wstring shareMenuTitle;
+		std::wstring webMenuTitle;
 	};
 	static ContextMenuInfo FetchInfo();
 	static void ShareObject(const std::wstring &path);
+	static void WebObject(const std::wstring &path);
 };
 
 #endif //ABSTRACTSOCKETHANDLER_H

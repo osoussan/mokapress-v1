@@ -110,15 +110,6 @@ Application::Application(int &argc, char **argv) :
     if (isRunning())
         return;
 
-#if QT_VERSION >= QT_VERSION_CHECK(5, 1, 0) && QT_VERSION < QT_VERSION_CHECK(5, 4, 2)
-    // Workaround for QTBUG-44576: Make sure a stale QSettings lock file
-    // is deleted. (Introduced in Qt 5.4.0 and fixed in Qt 5.4.2)
-    {
-        QString lockFilePath = ConfigFile().configFile() + QLatin1String(".lock");
-        QLockFile(lockFilePath).removeStaleLockFile();
-    }
-#endif
-
 #if defined(WITH_CRASHREPORTER)
     if (ConfigFile().crashReporter())
         _crashHandler.reset(new CrashReporter::Handler( QDir::tempPath(), true, CRASHREPORTER_EXECUTABLE ));
@@ -169,6 +160,10 @@ Application::Application(int &argc, char **argv) :
 
     connect(FolderMan::instance()->socketApi(), SIGNAL(shareCommandReceived(QString, QString, bool)),
             _gui, SLOT(slotShowShareDialog(QString, QString, bool)));
+    connect(FolderMan::instance()->socketApi(), SIGNAL(infoCommandReceived(QString, QString)),
+            _gui, SLOT(slotShowInfoDialog(QString, QString)));
+    connect(FolderMan::instance()->socketApi(), SIGNAL(webCommandReceived(QString, QString)),
+            _gui, SLOT(slotCreateWebPage(QString, QString)));
 
     // startup procedure.
     connect(&_checkConnectionTimer, SIGNAL(timeout()), this, SLOT(slotCheckConnection()));
@@ -279,7 +274,7 @@ void Application::slotAccountStateChanged(int state)
         folderMan->setSyncEnabled(true);
         folderMan->slotScheduleAllFolders();
         break;
-    case AccountState::ServiceUnavailable:
+    case AccountState::ServerMaintenance:
     case AccountState::SignedOut:
     case AccountState::ConfigurationError:
     case AccountState::NetworkError:
@@ -467,7 +462,7 @@ void Application::showHelp()
     stream << QLatin1String("File synchronisation desktop utility.") << endl << endl
            << QLatin1String(optionsC);
 
-    if (_theme->appName() == QLatin1String("ownCloud"))
+    if (_theme->appName() == QLatin1String("Mokpress"))
         stream << endl << "For more information, see http://www.owncloud.org" << endl << endl;
 
     displayHelpText(helpText);

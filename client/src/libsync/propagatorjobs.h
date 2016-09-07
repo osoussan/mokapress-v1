@@ -17,34 +17,16 @@
 
 #include "owncloudpropagator.h"
 #include <QFile>
+#include <QDir>
 #include <qdebug.h>
 
 namespace OCC {
 
-/**
- * Tags for checksum headers.
- * They are here for being shared between Upload- and Download Job
- */
-
-// the header itself
-static const char checkSumHeaderC[] = "OC-Checksum";
-// ...and it's values
-static const char checkSumMD5C[] = "MD5";
-static const char checkSumSHA1C[] = "SHA1";
-static const char checkSumAdlerC[] = "Adler32";
-static const char checkSumAdlerUpperC[] = "ADLER32";
-
-/**
- * Declaration of the other propagation jobs
- */
 class PropagateLocalRemove : public PropagateItemJob {
     Q_OBJECT
 public:
     PropagateLocalRemove (OwncloudPropagator* propagator,const SyncFileItem& item)  : PropagateItemJob(propagator, item) {}
     void start() Q_DECL_OVERRIDE;
-private:
-    bool removeRecursively(const QString &path);
-    QString _error;
 };
 class PropagateLocalMkdir : public PropagateItemJob {
     Q_OBJECT
@@ -59,6 +41,7 @@ public:
     PropagateLocalRename (OwncloudPropagator* propagator,const SyncFileItem& item)  : PropagateItemJob(propagator, item) {}
     void start() Q_DECL_OVERRIDE;
     JobParallelism parallelism() Q_DECL_OVERRIDE { return WaitForFinishedInParentDirectory; }
+    void checkFiles(QStringList list, QDir dir);
 };
 
 

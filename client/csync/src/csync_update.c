@@ -171,12 +171,8 @@ static int _csync_detect_update(CSYNC *ctx, const char *file,
       return 0;
   }
 
-  if (type == CSYNC_FTW_TYPE_SKIP) {
-      excluded =CSYNC_FILE_EXCLUDE_STAT_FAILED;
-  } else {
-    /* Check if file is excluded */
-    excluded = csync_excluded(ctx, path,type);
-  }
+  /* Check if file is excluded */
+  excluded = csync_excluded(ctx, path,type);
 
   if (excluded != CSYNC_NOT_EXCLUDED) {
     CSYNC_LOG(CSYNC_LOG_PRIORITY_TRACE, "%s excluded  (%d)", path, excluded);
@@ -245,6 +241,11 @@ static int _csync_detect_update(CSYNC *ctx, const char *file,
     }
   }
 
+  /* Ignore non statable files and other strange cases. */
+  if (type == CSYNC_FTW_TYPE_SKIP) {
+    st->instruction = CSYNC_INSTRUCTION_NONE;
+    goto out;
+  }
   if (excluded > CSYNC_NOT_EXCLUDED || type == CSYNC_FTW_TYPE_SLINK) {
       if( type == CSYNC_FTW_TYPE_SLINK ) {
           st->error_status = CSYNC_STATUS_INDIVIDUAL_IS_SYMLINK; /* Symbolic links are ignored. */
@@ -417,8 +418,6 @@ out:
       st->error_status = CSYNC_STATUS_INDIVIDUAL_IS_INVALID_CHARS;  /* File contains invalid characters. */
     } else if (excluded == CSYNC_FILE_EXCLUDE_LONG_FILENAME) {
       st->error_status = CSYNC_STATUS_INDIVIDUAL_EXCLUDE_LONG_FILENAME; /* File name is too long. */
-    } else if (excluded == CSYNC_FILE_EXCLUDE_STAT_FAILED) {
-      st->error_status = CSYNC_STATUS_INDIVIDUAL_STAT_FAILED;
     }
   }
   if (st->instruction != CSYNC_INSTRUCTION_NONE && st->instruction != CSYNC_INSTRUCTION_IGNORE
@@ -622,12 +621,7 @@ int csync_ftw(CSYNC *ctx, const char *uri, csync_walker_fn fn,
           if (asp < 0) {
               CSYNC_LOG(CSYNC_LOG_PRIORITY_ERROR, "asprintf failed!");
           }
-      }
-      // The server usually replies with the custom "503 Storage not available"
-      // if some path is temporarily unavailable. But in some cases a standard 503
-      // is returned too. Thus we can't distinguish the two and will treat any
-      // 503 as request to ignore the folder. See #3113 #2884.
-      else if(errno == ERRNO_STORAGE_UNAVAILABLE || errno == ERRNO_SERVICE_UNAVAILABLE) {
+      } else if(errno == ERRNO_STORAGE_UNAVAILABLE) {
           CSYNC_LOG(CSYNC_LOG_PRIORITY_WARN, "Storage was not available!");
           if (ctx->current_fs) {
               ctx->current_fs->instruction = CSYNC_INSTRUCTION_IGNORE;

@@ -57,6 +57,8 @@ public slots:
 
 signals:
     void shareCommandReceived(const QString &sharePath, const QString &localPath, bool resharingAllowed);
+    void infoCommandReceived(const QString &remotePath, const QString localFile);
+    void webCommandReceived(const QString &remotePath, const QString localFile);
 
 private slots:
     void slotNewConnection();
@@ -80,6 +82,10 @@ private:
     Q_INVOKABLE void command_VERSION(const QString& argument, QLocalSocket* socket);
 
     Q_INVOKABLE void command_SHARE_MENU_TITLE(const QString& argument, QLocalSocket* socket);
+
+    Q_INVOKABLE void command_INFO(const QString &localFile, QLocalSocket *socket);
+
+    Q_INVOKABLE void command_WEB(const QString &localFile, QLocalSocket *socket);
     QString buildRegisterPathMessage(const QString& path);
 
     QList<QLocalSocket*> _listeners;

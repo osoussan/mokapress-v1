@@ -44,13 +44,9 @@ QString ownCloudTheme::configFileName() const
 QString ownCloudTheme::about() const
 {
     QString devString;
-    devString = trUtf8("<p>Version %2. For more information visit <a href=\"%3\">%4</a></p>"
-               "<p><small>By Klaas Freitag, Daniel Molkentin, Jan-Christoph Borchardt, "
-               "Olivier Goffart, Markus Götz and others.</small></p>"
-               "<p>Copyright ownCloud, Inc.</p>"
-               "<p>Licensed under the GNU General Public License (GPL) Version 2.0<br/>"
-               "ownCloud and the ownCloud Logo are registered trademarks of ownCloud, "
-               "Inc. in the United States, other countries, or both.</p>"
+    devString = trUtf8("<p>Version %2. For more information please refer to <a href=\"%3\">%4</a></p>"
+               "<p>Copyright Mokapress, Inc.</p>"
+               "<p>Mokapress uses open source software, please refer to <a href=\"%3\">%4</a> for more informations.</p>"
                )
             .arg(MIRALL_VERSION_STRING)
             .arg("http://" MIRALL_STRINGIFY(APPLICATION_DOMAIN))
@@ -91,13 +87,13 @@ QVariant ownCloudTheme::customMedia(Theme::CustomMediaType type)
 
 QString ownCloudTheme::helpUrl() const
 {
-    return QString::fromLatin1("http://doc.owncloud.org/desktop/%1.%2/").arg(MIRALL_VERSION_MAJOR).arg(MIRALL_VERSION_MINOR);
+    return QString::fromLatin1("www.mokapress.com/help");
 }
 
 #ifndef TOKEN_AUTH_ONLY
 QColor ownCloudTheme::wizardHeaderBackgroundColor() const
 {
-    return QColor("#1d2d42");
+    return QColor("#2c98a2");
 }
 
 QColor ownCloudTheme::wizardHeaderTitleColor() const
@@ -113,12 +109,12 @@ QPixmap ownCloudTheme::wizardHeaderLogo() const
 
 QString ownCloudTheme::appName() const
 {
-    return QLatin1String("ownCloud");
+    return QLatin1String("Mokapress");
 }
 
 QString ownCloudTheme::appNameGUI() const
 {
-    return QLatin1String("ownCloud");
+    return QLatin1String("Mokapress");
 }
 
 

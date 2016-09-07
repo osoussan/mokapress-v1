@@ -27,6 +27,7 @@
 #include "account.h"
 #include "accountstate.h"
 #include "quotainfo.h"
+#include "debugdialog.h"
 #include "selectivesyncdialog.h"
 #include "creds/abstractcredentials.h"
 
@@ -79,8 +80,8 @@ AccountSettings::AccountSettings(QWidget *parent) :
 
     ui->_buttonRemove->setEnabled(false);
     ui->_buttonEnable->setEnabled(false);
-    ui->_buttonSelectiveSync->setEnabled(false);
-    ui->_buttonAdd->setEnabled(true);
+//    ui->_buttonSelectiveSync->setEnabled(false);
+//    ui->_buttonAdd->setEnabled(true);
 
     QAction *resetFolderAction = new QAction(this);
     resetFolderAction->setShortcut(QKeySequence(Qt::Key_F5));
@@ -93,11 +94,12 @@ AccountSettings::AccountSettings(QWidget *parent) :
     addAction(syncNowAction);
 
     connect(ui->_buttonRemove, SIGNAL(clicked()), this, SLOT(slotRemoveCurrentFolder()));
-    connect(ui->_buttonEnable, SIGNAL(clicked()), this, SLOT(slotEnableCurrentFolder()));
-    connect(ui->_buttonAdd,    SIGNAL(clicked()), this, SLOT(slotAddFolder()));
-    connect(ui->_buttonSelectiveSync, SIGNAL(clicked()), this, SLOT(slotSelectiveSync()));
+    connect(ui->_buttonEnable, SIGNAL(clicked()), this, SLOT(slotEnableCurrentFolder()));    
+//    connect(ui->debugButton, SIGNAL(clicked()), this, SLOT(slotShowDebugDialog()));
+//    connect(ui->_buttonAdd,    SIGNAL(clicked()), this, SLOT(slotAddFolder()));
+//    connect(ui->_buttonSelectiveSync, SIGNAL(clicked()), this, SLOT(slotSelectiveSync()));
     connect(ui->modifyAccountButton, SIGNAL(clicked()), SLOT(slotOpenAccountWizard()));
-    connect(ui->ignoredFilesButton, SIGNAL(clicked()), SLOT(slotIgnoreFilesEditor()));;
+//    connect(ui->ignoredFilesButton, SIGNAL(clicked()), SLOT(slotIgnoreFilesEditor()));;
 
     connect(ui->_folderList, SIGNAL(clicked(QModelIndex)), SLOT(slotFolderActivated(QModelIndex)));
     connect(ui->_folderList, SIGNAL(doubleClicked(QModelIndex)),SLOT(slotDoubleClicked(QModelIndex)));
@@ -109,7 +111,7 @@ AccountSettings::AccountSettings(QWidget *parent) :
     ui->quotaLabel->setWordWrap(true);
 
     ui->connectLabel->setText(tr("No account configured."));
-    ui->_buttonAdd->setEnabled(false);
+//    ui->_buttonAdd->setEnabled(false);
 
     connect(AccountStateManager::instance(), SIGNAL(accountStateAdded(AccountState*)),
             this, SLOT(slotAccountStateChanged(AccountState*)));
@@ -119,6 +121,17 @@ AccountSettings::AccountSettings(QWidget *parent) :
     connect(folderMan, SIGNAL(folderListLoaded(Folder::Map)),
             this, SLOT(setFolderList(Folder::Map)));
     setFolderList(FolderMan::instance()->map());
+}
+
+void AccountSettings::slotShowDebugDialog()
+{
+    if (QSystemTrayIcon::isSystemTrayAvailable()) {
+        topLevelWidget()->close();
+    }
+    DebugDialog *debugDialog = new DebugDialog();
+    debugDialog->showNormal();
+    debugDialog->raise();
+    debugDialog->activateWindow();
 }
 
 void AccountSettings::slotAccountStateChanged(AccountState *newAccountState)
@@ -152,14 +165,14 @@ void AccountSettings::slotFolderActivated( const QModelIndex& indx )
   ui->_buttonRemove->setEnabled(isValid);
   if( Theme::instance()->singleSyncFolder() ) {
       // only one folder synced folder allowed.
-      ui->_buttonAdd->setVisible(!haveFolders);
+//      ui->_buttonAdd->setVisible(!haveFolders);
   } else {
-      ui->_buttonAdd->setVisible(true);
+//      ui->_buttonAdd->setVisible(true);
   }
   bool isConnected = _accountState && _accountState->isConnected();
-  ui->_buttonAdd->setEnabled(isConnected);
+//  ui->_buttonAdd->setEnabled(isConnected);
   ui->_buttonEnable->setEnabled( isValid );
-  ui->_buttonSelectiveSync->setEnabled(isConnected && isValid);
+//  ui->_buttonSelectiveSync->setEnabled(isConnected && isValid);
 
   if ( isValid ) {
     bool folderPaused = _model->data( indx, FolderStatusDelegate::FolderSyncPaused).toBool();
@@ -234,7 +247,7 @@ void AccountSettings::slotAddFolder( Folder *folder )
     if( ! folder || folder->alias().isEmpty() ) return;
 
     QStandardItem *item = new QStandardItem();
-    folderToModelItem( item, folder, _accountState && _accountState->isConnectedOrTemporarilyUnavailable());
+    folderToModelItem( item, folder, _accountState && _accountState->isConnectedOrMaintenance());
     _model->appendRow( item );
     // in order to update the enabled state of the "Sync now" button
     connect(folder, SIGNAL(syncStateChange()), this, SLOT(slotFolderSyncStateChange()), Qt::UniqueConnection);
@@ -398,18 +411,6 @@ void AccountSettings::slotSelectiveSync()
     }
 }
 
-void AccountSettings::slotForceRemoteDiscoveryOnFolders()
-{
-    FolderMan* folders = FolderMan::instance();
-    foreach (Folder* folder, folders->map()) {
-        if (folder->accountState() != _accountState) {
-            continue;
-        }
-
-        folder->journalDb()->forceRemoteDiscoveryNextSync();
-    }
-}
-
 void AccountSettings::slotDoubleClicked( const QModelIndex& indx )
 {
     if( ! indx.isValid() ) return;
@@ -549,7 +550,7 @@ void AccountSettings::slotUpdateFolderState( Folder *folder )
     }
 
     if( item ) {
-        folderToModelItem( item, folder, _accountState->isConnectedOrTemporarilyUnavailable() );
+        folderToModelItem( item, folder, _accountState->isConnectedOrMaintenance() );
     } else {
         // the dialog is not visible.
     }
@@ -789,7 +790,6 @@ void AccountSettings::slotIgnoreFilesEditor()
         _ignoreEditor = new IgnoreListEditor(this);
         _ignoreEditor->setAttribute( Qt::WA_DeleteOnClose, true );
         _ignoreEditor->open();
-        connect(_ignoreEditor, SIGNAL(accepted()), SLOT(slotForceRemoteDiscoveryOnFolders()));
     } else {
         ownCloudGui::raiseDialog(_ignoreEditor);
     }
@@ -807,28 +807,25 @@ void AccountSettings::slotAccountStateChanged(int state)
         foreach (Folder *folder, folderMan->map().values()) {
             slotUpdateFolderState(folder);
         }
-        if (state == AccountState::Connected || state == AccountState::ServiceUnavailable) {
+        if (state == AccountState::Connected || state == AccountState::ServerMaintenance) {
             QString user;
             if (AbstractCredentials *cred = account->credentials()) {
                user = cred->user();
             }
             if (user.isEmpty()) {
-                showConnectionLabel( tr("Connected to <a href=\"%1\">%2</a>.").arg(account->url().toString(), safeUrl.toString())
+                showConnectionLabel( tr("Connected.")
                                  /*, tr("Version: %1 (%2)").arg(versionStr).arg(version) */ );
             } else {
-                showConnectionLabel( tr("Connected to <a href=\"%1\">%2</a> as <i>%3</i>.").arg(account->url().toString(), safeUrl.toString(), user)
+                showConnectionLabel( tr("Connected as <i>%3</i>.").arg(user)
                                  /*, tr("Version: %1 (%2)").arg(versionStr).arg(version) */ );
             }
         } else {
-            showConnectionLabel( tr("No connection to %1 at <a href=\"%2\">%3</a>.")
-                                 .arg(Theme::instance()->appNameGUI(),
-                                      account->url().toString(),
-                                      safeUrl.toString()) );
+            showConnectionLabel( tr("No connection"));
         }
     } else {
         // ownCloud is not yet configured.
         showConnectionLabel( tr("No %1 connection configured.").arg(Theme::instance()->appNameGUI()) );
-        ui->_buttonAdd->setEnabled( false);
+//        ui->_buttonAdd->setEnabled( false);
     }
 }
 

@@ -189,10 +189,6 @@ void OwncloudSetupWizard::slotNoOwnCloudFoundAuth(QNetworkReply *reply)
                             .arg(Theme::instance()->appNameGUI(),
                                  reply->url().toString(),
                                  reply->errorString()), checkDowngradeAdvised(reply));
-
-    // Allow the credentials dialog to pop up again for the same URL.
-    // Maybe the user just clicked 'Cancel' by accident or changed his mind.
-    _ocWizard->account()->resetSslCertErrorState();
 }
 
 void OwncloudSetupWizard::slotNoOwnCloudFoundAuthTimeout(const QUrl&url)
@@ -267,12 +263,11 @@ void OwncloudSetupWizard::slotAuthError()
 
     // Provide messages for other errors, such as invalid credentials.
     } else if (reply->error() != QNetworkReply::NoError) {
+        errorMsg = reply->errorString();
         if (!_ocWizard->account()->credentials()->stillValid(reply)) {
             errorMsg = tr("Access forbidden by server. To verify that you have proper access, "
                           "<a href=\"%1\">click here</a> to access the service with your browser.")
                        .arg(_ocWizard->account()->url().toString());
-        } else {
-            errorMsg = errorMessage(reply->errorString(), reply->readAll());
         }
 
     // Something else went wrong, maybe the response was 200 but with invalid data.
@@ -323,6 +318,18 @@ void OwncloudSetupWizard::slotCreateLocalAndRemoteFolders(const QString& localFo
     } else {
         QString res = tr("Creating local sync folder %1...").arg(localFolder);
         if( fi.mkpath( localFolder ) ) {
+           fi.mkpath(tr("%1/%2").arg(localFolder, ".config"));
+#ifdef Q_OS_WIN
+           QString str=tr("%1/%2").arg(fi.absolutePath(), ".config");
+           std::string tmp = str.toStdString();
+           const char *orig = tmp.c_str();
+           size_t origsize = strlen(orig) + 1;
+           const size_t newsize = 100;
+           size_t convertedChars = 0;
+           wchar_t wcstring[newsize];
+           mbstowcs_s(&convertedChars, wcstring, origsize, orig, _TRUNCATE);
+           SetFileAttributes(wcstring, FILE_ATTRIBUTE_HIDDEN);
+#endif
             Utility::setupFavLink( localFolder );
             // FIXME: Create a local sync folder.
             res += tr("ok");

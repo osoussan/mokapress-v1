@@ -12,20 +12,24 @@
 	<dict>
 		<key>09EE94AA-F410-4594-AB26-5A0220DEAEC7</key>
 		<string>ssh://github.com/owncloud/client.git</string>
+		<key>7C03459849496FF5DFF9D4F6120F8D52A0B364FE</key>
+		<string>https://github.com/mguesner/projet-mokapress.git</string>
 	</dict>
 	<key>IDESourceControlProjectPath</key>
 	<string>shell_integration/MacOSX/OwnCloud.xcworkspace</string>
 	<key>IDESourceControlProjectRelativeInstallPathDictionary</key>
 	<dict>
 		<key>09EE94AA-F410-4594-AB26-5A0220DEAEC7</key>
+		<string>../../../../client</string>
+		<key>7C03459849496FF5DFF9D4F6120F8D52A0B364FE</key>
 		<string>../../..</string>
 	</dict>
 	<key>IDESourceControlProjectURL</key>
-	<string>ssh://github.com/owncloud/client.git</string>
+	<string>https://github.com/mguesner/projet-mokapress.git</string>
 	<key>IDESourceControlProjectVersion</key>
-	<integer>110</integer>
+	<integer>111</integer>
 	<key>IDESourceControlProjectWCCIdentifier</key>
-	<string>09EE94AA-F410-4594-AB26-5A0220DEAEC7</string>
+	<string>7C03459849496FF5DFF9D4F6120F8D52A0B364FE</string>
 	<key>IDESourceControlProjectWCConfigurations</key>
 	<array>
 		<dict>
@@ -35,6 +39,14 @@
 			<string>09EE94AA-F410-4594-AB26-5A0220DEAEC7</string>
 			<key>IDESourceControlWCCName</key>
 			<string>client</string>
+		</dict>
+		<dict>
+			<key>IDESourceControlRepositoryExtensionIdentifierKey</key>
+			<string>public.vcs.git</string>
+			<key>IDESourceControlWCCIdentifierKey</key>
+			<string>7C03459849496FF5DFF9D4F6120F8D52A0B364FE</string>
+			<key>IDESourceControlWCCName</key>
+			<string>projet-mokapress</string>
 		</dict>
 	</array>
 </dict>

@@ -75,7 +75,7 @@ SyncEngine::SyncEngine(AccountPtr account, CSYNC *ctx, const QString& localPath,
     qRegisterMetaType<SyncFileItem::Status>("SyncFileItem::Status");
     qRegisterMetaType<Progress::Info>("Progress::Info");
 
-    _thread.setObjectName("SyncEngine_Thread");
+    _thread.setObjectName("CSync_Neon_Thread");
     _thread.start();
 }
 
@@ -378,9 +378,6 @@ int SyncEngine::treewalkFile( TREE_WALK_FILE *file, bool remote )
     case CYSNC_STATUS_FILE_LOCKED_OR_OPEN:
         item._errorString = QLatin1String("File locked"); // don't translate, internal use!
         break;
-    case CSYNC_STATUS_INDIVIDUAL_STAT_FAILED:
-        item._errorString = tr("Stat failed.");
-        break;
     case CSYNC_STATUS_SERVICE_UNAVAILABLE:
         item._errorString = QLatin1String("Server temporarily unavailable.");
         break;
@@ -441,8 +438,6 @@ int SyncEngine::treewalkFile( TREE_WALK_FILE *file, bool remote )
             // Even if the mtime is different on the server, we always want to keep the mtime from
             // the file system in the DB, this is to avoid spurious upload on the next sync
             item._modtime = file->other.modtime;
-            // same for the size
-            item._size = file->other.size;
 
             _journal->setFileRecord(SyncJournalFileRecord(item, _localPath + item._file));
             item._should_update_etag = false;
@@ -600,6 +595,7 @@ void SyncEngine::startSync()
 #endif
 
     fileRecordCount = _journal->getFileRecordCount(); // this creates the DB if it does not exist yet
+    bool isUpdateFrom_1_5 = _journal->isUpdateFrom_1_5();
 
     if( fileRecordCount == -1 ) {
         qDebug() << "No way to create a sync journal!";
@@ -609,7 +605,20 @@ void SyncEngine::startSync()
         // database creation error!
     }
 
-    _csync_ctx->read_remote_from_db = true;
+    bool isUpdateFrom_1_8 = _journal->isUpdateFrom_1_8_0();
+
+    /*
+     * If 1.8.0 caused missing data in the local tree, this patch gets it
+     * back. For that, the usage of the journal for remote repository is
+     * disabled at the first start.
+     */
+    if (fileRecordCount >= 1 && (isUpdateFrom_1_5 || isUpdateFrom_1_8)) {
+        qDebug() << "detected update from 1.5" << fileRecordCount << isUpdateFrom_1_5;
+        // Disable the read from DB to be sure to re-read all the fileid and etags.
+        _csync_ctx->read_remote_from_db = false;
+    } else {
+        _csync_ctx->read_remote_from_db = true;
+    }
 
     // This tells csync to never read from the DB if it is empty
     // thereby speeding up the initial discovery significantly.

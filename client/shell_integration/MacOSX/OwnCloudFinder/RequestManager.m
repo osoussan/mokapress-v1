@@ -31,7 +31,6 @@ static RequestManager* sharedInstance = nil;
 		_isConnected = NO;
 
 		_registeredPathes = [[NSMutableDictionary alloc] init];
-		_requestedPaths = [[NSMutableSet alloc] init];
 
 		_shareMenuTitle = nil;
 
@@ -102,23 +101,28 @@ static RequestManager* sharedInstance = nil;
 	return registered;
 }
 
-- (void)askForIcon:(NSString*)path isDirectory:(BOOL)isDir
+- (NSNumber*)askForIcon:(NSString*)path isDirectory:(BOOL)isDir
 {
 	NSString *verb = @"RETRIEVE_FILE_STATUS";
+	NSNumber *res = [NSNumber numberWithInt:0];
 
 	if( [self isRegisteredPath:path isDirectory:isDir] ) {
-		[_requestedPaths addObject:path];
 		if( _isConnected ) {
 			if(isDir) {
 				verb = @"RETRIEVE_FOLDER_STATUS";
 			}
 
 			[self askOnSocket:path query:verb];
+
+			NSNumber *res_minus_one = [NSNumber numberWithInt:0];
+
+			return res_minus_one;
 		} else {
 			[_requestQueue addObject:path];
 			[self start]; // try again to connect
 		}
 	}
+	return res;
 }
 
 
@@ -143,13 +147,9 @@ static RequestManager* sharedInstance = nil;
 							path, [chunks objectAtIndex:i+1] ];
 				}
 			}
-			// The client will broadcast all changes, do not fill the cache for paths that Finder didn't ask for.
-			if ([_requestedPaths containsObject:path]) {
-				[contentman setResultForPath:path result:[chunks objectAtIndex:1]];
-			}
+			[contentman setResultForPath:path result:[chunks objectAtIndex:1]];
 		} else if( [[chunks objectAtIndex:0] isEqualToString:@"UPDATE_VIEW"] ) {
 			NSString *path = [chunks objectAtIndex:1];
-			[_requestedPaths removeAllObjects];
 			[contentman reFetchFileNameCacheForPath:path];
 		} else if( [[chunks objectAtIndex:0 ] isEqualToString:@"REGISTER_PATH"] ) {
 			NSNumber *one = [NSNumber numberWithInt:1];
@@ -168,9 +168,12 @@ static RequestManager* sharedInstance = nil;
 			[[ContentManager sharedInstance] loadIconResourcePath:path];
 		} else if( [[chunks objectAtIndex:0 ] isEqualToString:@"SHARE_MENU_TITLE"] ) {
 			_shareMenuTitle = [[chunks objectAtIndex:1] copy];
-				// NSLog(@"Received shar menu title: %@", _shareMenuTitle);
+			NSLog(@"Received shar menu title: %@", _shareMenuTitle);
+		}  else if( [[chunks objectAtIndex:0 ] isEqualToString:@"WEB_MENU_TITLE"] ) {
+			_webMenuTitle = [[chunks objectAtIndex:1] copy];
+			NSLog(@"Received web menu title: %@", _webMenuTitle);
 		} else {
-			NSLog(@"SyncState: Unknown command %@", [chunks objectAtIndex:0]);
+			NSLog(@"SyncState: Unknown command _%@_ -> _WEB_MENU_TITLE_", [chunks objectAtIndex:0]);
 		}
 	} else if (tag != READ_TAG) {
 		NSLog(@"SyncState: Received unknown tag %ld <%@>", tag, answer);
@@ -198,11 +201,10 @@ static RequestManager* sharedInstance = nil;
 		for( NSString *path in _requestQueue ) {
 			[self askOnSocket:path query:@"RETRIEVE_FILE_STATUS"];
 		}
-		[_requestQueue removeAllObjects];
 	}
 
 	ContentManager *contentman = [ContentManager sharedInstance];
-	[contentman clearFileNameCache];
+	[contentman clearFileNameCacheForPath:nil];
 	[contentman repaintAllWindows];
 
 	// Read for the UPDATE_VIEW requests
@@ -219,11 +221,10 @@ static RequestManager* sharedInstance = nil;
 	// clear the registered pathes.
 	[_registeredPathes release];
 	_registeredPathes = [[NSMutableDictionary alloc] init];
-	[_requestedPaths removeAllObjects];
 
     // clear the caches in conent manager
 	ContentManager *contentman = [ContentManager sharedInstance];
-	[contentman clearFileNameCache];
+	[contentman clearFileNameCacheForPath:nil];
 	[contentman repaintAllWindows];
 }
 
@@ -301,7 +302,16 @@ static RequestManager* sharedInstance = nil;
 	// NSLog(@"RequestManager menuItemClicked %@", actionDictionary);
 	NSArray *filePaths = [actionDictionary valueForKey:@"files"];
 	for (int i = 0; i < filePaths.count; i++) {
-		[self askOnSocket:[filePaths objectAtIndex:i] query:@"SHARE"];
+		[self askOnSocket:[filePaths objectAtIndex:i] query:@"INFO"];
+	}
+}
+
+- (void)menuItemClicked2:(NSDictionary*)actionDictionary
+{
+	// NSLog(@"RequestManager menuItemClicked %@", actionDictionary);
+	NSArray *filePaths = [actionDictionary valueForKey:@"files"];
+	for (int i = 0; i < filePaths.count; i++) {
+		[self askOnSocket:[filePaths objectAtIndex:i] query:@"WEB"];
 	}
 }
 
@@ -309,6 +319,14 @@ static RequestManager* sharedInstance = nil;
 {
 	if (_socket && _socket.isConnected && _shareMenuTitle) {
 		return _shareMenuTitle;
+	}
+	return nil;
+}
+
+- (NSString*) webItemTitle
+{
+	if (_socket && _socket.isConnected && _webMenuTitle) {
+		return _webMenuTitle;
 	}
 	return nil;
 }

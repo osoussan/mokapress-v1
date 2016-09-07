@@ -20,7 +20,6 @@
 #include <QFile>
 #include <QDebug>
 
-
 namespace OCC {
 class BandwidthManager;
 
@@ -41,21 +40,11 @@ public:
     bool isSequential() const Q_DECL_OVERRIDE;
     bool seek ( qint64 pos ) Q_DECL_OVERRIDE;
 
-#if QT_VERSION < QT_VERSION_CHECK(5, 4, 2)
-    bool reset() Q_DECL_OVERRIDE { emit wasReset(); return QIODevice::reset(); }
-#endif
-
     void setBandwidthLimited(bool);
     bool isBandwidthLimited() { return _bandwidthLimited; }
     void setChoked(bool);
     bool isChoked() { return _choked; }
     void giveBandwidthQuota(qint64 bwq);
-
-signals:
-#if QT_VERSION < 0x050402
-    void wasReset();
-#endif
-
 private:
 
     // The file data
@@ -76,8 +65,6 @@ protected slots:
 
 class PUTFileJob : public AbstractNetworkJob {
     Q_OBJECT
-
-private:
     QScopedPointer<QIODevice> _device;
     QMap<QByteArray, QByteArray> _headers;
     QString _errorString;
@@ -108,11 +95,6 @@ public:
 signals:
     void finishedSignal();
     void uploadProgress(qint64,qint64);
-
-private slots:
-#if QT_VERSION < 0x050402
-    void slotSoftAbort();
-#endif
 };
 
 /**
@@ -126,9 +108,9 @@ class PollJob : public AbstractNetworkJob {
     SyncJournalDb *_journal;
     QString _localPath;
 public:
-    SyncFileItem &_item;
+    SyncFileItem _item;
     // Takes ownership of the device
-    explicit PollJob(AccountPtr account, const QString &path, SyncFileItem &item,
+    explicit PollJob(AccountPtr account, const QString &path, const SyncFileItem &item,
                      SyncJournalDb *journal, const QString &localPath, QObject *parent)
         : AbstractNetworkJob(account, path, parent), _journal(journal), _localPath(localPath), _item(item) {}
 
@@ -149,7 +131,6 @@ signals:
 class PropagateUploadFileQNAM : public PropagateItemJob {
     Q_OBJECT
 
-private:
     /**
      * That's the start chunk that was stored in the database for resuming.
      * In the non-resuming case it is 0.
@@ -167,10 +148,6 @@ private:
     QElapsedTimer _duration;
     QVector<PUTFileJob*> _jobs; /// network jobs that are currently in transit
     bool _finished; // Tells that all the jobs have been finished
-
-    // measure the performance of checksum calc and upload
-    Utility::StopWatch _stopWatch;
-
 public:
     PropagateUploadFileQNAM(OwncloudPropagator* propagator,const SyncFileItem& item)
         : PropagateItemJob(propagator, item), _startChunk(0), _currentChunk(0), _chunkCount(0), _transferId(0), _finished(false) {}
@@ -183,8 +160,6 @@ private slots:
     void startNextChunk();
     void finalize(const SyncFileItem&);
     void slotJobDestroyed(QObject *job);
-    void slotStartUpload(const QByteArray &checksum);
-
 private:
     void startPollJob(const QString& path);
     void abortWithError(SyncFileItem::Status status, const QString &error);

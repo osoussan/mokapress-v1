@@ -77,7 +77,7 @@ public:
         CredentialsWrong,
         StatusNotFound,
         UserCanceledCredentials,
-        ServiceUnavailable,
+        ServerMaintenance,
         // actually also used for other errors on the authed request
         Timeout
     };

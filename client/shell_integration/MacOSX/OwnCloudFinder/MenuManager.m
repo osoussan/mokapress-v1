@@ -75,6 +75,7 @@ static MenuManager* sharedInstance = nil;
 {
 	RequestManager *requestManager = [RequestManager sharedInstance];
 	NSString *shareItemTitle = [requestManager shareItemTitle];
+	NSString *webItemTitle =[requestManager webItemTitle];
 	if (!shareItemTitle || shareItemTitle.length == 0) {
 		return;
 	}
@@ -91,9 +92,13 @@ static MenuManager* sharedInstance = nil;
 
 	NSMutableArray* menuItemsArray = [[[NSMutableArray alloc] init] autorelease];
 	NSMutableDictionary *firstEntry = [[[NSMutableDictionary alloc] init] autorelease];
+	NSMutableDictionary *secondEntry = [[[NSMutableDictionary alloc] init] autorelease];
 	[firstEntry setValue:[NSNumber numberWithBool:YES] forKey:@"enabled"];
 	[firstEntry setValue:shareItemTitle forKey:@"title"];
+	[secondEntry setValue:[NSNumber numberWithBool:YES] forKey:@"enabled"];
+	[secondEntry setValue:webItemTitle forKey:@"title"];
 	[menuItemsArray addObject:firstEntry];
+	[menuItemsArray addObject:secondEntry];
 
 	// Find the menu with a submenu which should be the share menu position
 	NSInteger menuIndex = MIN(4, menu.itemArray.count);
@@ -137,7 +142,16 @@ static MenuManager* sharedInstance = nil;
 
 - (void)createActionMenuItemIn:(NSMenu*)menu withTitle:(NSString*)title withIndex:(NSInteger*)index enabled:(BOOL)enabled withUuid:(NSString*)uuid forFiles:(NSArray*)files
 {
-	NSMenuItem* mainMenuItem = [menu insertItemWithTitle:title action:@selector(menuItemClicked:) keyEquivalent:@"" atIndex:index];
+	RequestManager *requestManager = [RequestManager sharedInstance];
+	NSString *webItemTitle =[requestManager webItemTitle];
+	NSMenuItem* mainMenuItem;
+	NSLog(@"titel -> %@, enabled = %s", title, enabled ? "true" : "false");
+	if ([title isEqualToString:webItemTitle])
+		mainMenuItem = [menu insertItemWithTitle:title action:@selector(menuItemClicked2:) keyEquivalent:@""
+													 atIndex:index];
+	else
+		mainMenuItem = [menu insertItemWithTitle:title action:@selector(menuItemClicked:) keyEquivalent:@""
+													 atIndex:index];
 
 	if (enabled)
 	{
@@ -158,6 +172,11 @@ static MenuManager* sharedInstance = nil;
 - (void)menuItemClicked:(id)param
 {
 	[[RequestManager sharedInstance] menuItemClicked:[param representedObject]];
+}
+
+- (void)menuItemClicked2:(id)param
+{
+	[[RequestManager sharedInstance] menuItemClicked2:[param representedObject]];
 }
 
 - (NSArray*)pathsForNodes:(const struct TFENodeVector*)nodes

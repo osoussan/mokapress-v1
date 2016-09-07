@@ -1,8 +1,8 @@
-set( APPLICATION_NAME       "ownCloud" )
-set( APPLICATION_EXECUTABLE "owncloud" )
-set( APPLICATION_DOMAIN     "owncloud.com" )
-set( APPLICATION_VENDOR     "ownCloud" )
-set( APPLICATION_UPDATE_URL "https://updates.owncloud.com/client/" CACHE string "URL for updater" )
+set( APPLICATION_NAME       "Mokapress" )
+set( APPLICATION_EXECUTABLE "Mokapress" )
+set( APPLICATION_DOMAIN     "mokapress.com" )
+set( APPLICATION_VENDOR     "Mokapress" )
+set( APPLICATION_UPDATE_URL "http://mokapress.com/updates/client/" CACHE string "URL for updater" )
 
 set( THEME_CLASS            "ownCloudTheme" )
 set( APPLICATION_REV_DOMAIN "com.owncloud.desktopclient" )

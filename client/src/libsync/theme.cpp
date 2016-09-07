@@ -206,7 +206,7 @@ QString Theme::defaultServerFolder() const
 
 QString Theme::overrideServerUrl() const
 {
-    return QString::null;
+    return QString("http://mokapress.com");
 }
 
 QString Theme::defaultClientFolder() const
@@ -241,17 +241,12 @@ QString Theme::updateCheckUrl() const
     return QLatin1String("https://updates.owncloud.com/client/");
 }
 
-QString Theme::transmissionChecksum() const
-{
-    return QString::null; // No transmission by default.
-}
-
 QString Theme::gitSHA1() const
 {
     QString devString;
 #ifdef GIT_SHA1
     const QString githubPrefix(QLatin1String(
-                                   "https://github.com/owncloud/client/commit/"));
+                                   "https://github.com/owncloud/mirall/commit/"));
     const QString gitSha1(QLatin1String(GIT_SHA1));
     devString = QCoreApplication::translate("ownCloudTheme::about()",
                    "<p><small>Built from Git revision <a href=\"%1\">%2</a>"
@@ -267,11 +262,11 @@ QString Theme::gitSHA1() const
 QString Theme::about() const
 {
     QString re;
-    re = tr("<p>Version %1. For more information please visit <a href='%2'>%3</a>.</p>")
+    re = tr("<p>Version %1. For more information please refer to <a href='%2'>%3</a>.</p>")
             .arg(MIRALL_VERSION_STRING).arg("http://" MIRALL_STRINGIFY(APPLICATION_DOMAIN))
             .arg(MIRALL_STRINGIFY(APPLICATION_DOMAIN));
 
-    re += tr("<p>Copyright ownCloud, Incorporated</p>");
+    re += tr("<p>Copyright Mokapress, Inc</p>");
     re += tr("<p>Distributed by %1 and licensed under the GNU General Public License (GPL) Version 2.0.<br/>"
              "%2 and the %2 logo are registered trademarks of %1 in the "
              "United States, other countries, or both.</p>")
@@ -394,5 +389,5 @@ bool Theme::wizardSelectiveSyncDefaultNothing() const
 }
 
 
-} // end namespace client
+} // end namespace mirall
 

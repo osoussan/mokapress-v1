@@ -144,15 +144,6 @@ void ShareDialog::done( int r ) {
     QDialog::done(r);
 }
 
-static int getJsonReturnCode(const QVariantMap &json, QString &message)
-{
-    //TODO proper checking
-    int code = json.value("ocs").toMap().value("meta").toMap().value("statuscode").toInt();
-    message = json.value("ocs").toMap().value("meta").toMap().value("message").toString();
-
-    return code;
-}
-
 void ShareDialog::setExpireDate(const QDate &date)
 {
     if( _public_share_id == 0 ) {
@@ -171,14 +162,16 @@ void ShareDialog::setExpireDate(const QDate &date)
 
     OcsShareJob *job = new OcsShareJob("PUT", url, _account, this);
     job->setPostParams(postParams);
-    connect(job, SIGNAL(jobFinished(QVariantMap)), this, SLOT(slotExpireSet(QVariantMap)));
+    connect(job, SIGNAL(jobFinished(QString)), this, SLOT(slotExpireSet(QString)));
     job->start();
 }
 
-void ShareDialog::slotExpireSet(const QVariantMap &reply)
+void ShareDialog::slotExpireSet(const QString &reply)
 {
     QString message;
-    int code = getJsonReturnCode(reply, message);
+    int code = checkJsonReturnCode(reply, message);
+
+    qDebug() << Q_FUNC_INFO << "Status code: " << code;
     if (code != 100) {
         displayError(code);
     } 
@@ -241,15 +234,18 @@ void ShareDialog::setPassword(const QString &password)
     }
     OcsShareJob *job = new OcsShareJob(verb, url, _account, this);
     job->setPostParams(requestParams);
-    connect(job, SIGNAL(jobFinished(QVariantMap)), this, SLOT(slotPasswordSet(QVariantMap)));
+    connect(job, SIGNAL(jobFinished(QString)), this, SLOT(slotPasswordSet(QString)));
     job->start();
     _passwordJobRunning = true;
 }
 
-void ShareDialog::slotPasswordSet(const QVariantMap &reply)
+void ShareDialog::slotPasswordSet(const QString &reply)
 {
     QString message;
-    int code = getJsonReturnCode(reply, message);
+    int code = checkJsonReturnCode(reply, message);
+
+    qDebug() << Q_FUNC_INFO << "Status code: " << code;
+
     if (code != 100) {
         displayError(code);
     }
@@ -271,20 +267,23 @@ void ShareDialog::getShares()
     params.append(qMakePair(QString::fromLatin1("path"), _sharePath));
     url.setQueryItems(params);
     OcsShareJob *job = new OcsShareJob("GET", url, _account, this);
-    job->addPassStatusCode(404); // don't report error if share doesn't exist yet
-    connect(job, SIGNAL(jobFinished(QVariantMap)), this, SLOT(slotSharesFetched(QVariantMap)));
+    connect(job, SIGNAL(jobFinished(QString)), this, SLOT(slotSharesFetched(QString)));
     job->start();
 }
 
-void ShareDialog::slotSharesFetched(const QVariantMap &reply)
+void ShareDialog::slotSharesFetched(const QString &reply)
 {
     QString message;
-    int code = getJsonReturnCode(reply, message);
+    int code = checkJsonReturnCode(reply, message);
+
+    qDebug() << Q_FUNC_INFO << "Status code: " << code;
     if (code != 100 && code != 404) {
         displayError(code);
     }
 
-    ShareDialog::_shares = reply.value("ocs").toMap().value("data").toList();
+    bool success = false;
+    QVariantMap json = QtJson::parse(reply, success).toMap();
+    ShareDialog::_shares = json.value("ocs").toMap().value("data").toList();
     const QString versionString = AccountManager::instance()->account()->serverVersion();
 
     Q_FOREACH(auto share, ShareDialog::_shares) {
@@ -292,7 +291,6 @@ void ShareDialog::slotSharesFetched(const QVariantMap &reply)
 
         if (data.value("share_type").toInt() == SHARETYPE_PUBLIC) {
             _public_share_id = data.value("id").toULongLong();
-            _ui->pushButton_copy->show();
 
             _ui->widget_shareLink->show();
             _ui->checkBox_shareLink->setChecked(true);
@@ -386,10 +384,12 @@ void ShareDialog::setShareLink( const QString& url )
 
 }
 
-void ShareDialog::slotDeleteShareFetched(const QVariantMap &reply)
+void ShareDialog::slotDeleteShareFetched(const QString &reply)
 {
     QString message;
-    int code = getJsonReturnCode(reply, message);
+    int code = checkJsonReturnCode(reply, message);
+
+    qDebug() << Q_FUNC_INFO << "Status code: " << code;
     if (code != 100) {
         displayError(code);
     }
@@ -423,31 +423,29 @@ void ShareDialog::slotCheckBoxShareLinkClicked()
         postParams.append(qMakePair(QString::fromLatin1("shareType"), QString::number(SHARETYPE_PUBLIC)));
         OcsShareJob *job = new OcsShareJob("POST", url, _account, this);
         job->setPostParams(postParams);
-        job->addPassStatusCode(403); // "password required" is not an error
-        connect(job, SIGNAL(jobFinished(QVariantMap)), this, SLOT(slotCreateShareFetched(QVariantMap)));
+        connect(job, SIGNAL(jobFinished(QString)), this, SLOT(slotCreateShareFetched(QString)));
         job->start();
     } else {
         _pi_link->startAnimation();
         QUrl url = Account::concatUrlPath(_account->url(), QString("ocs/v1.php/apps/files_sharing/api/v1/shares/%1").arg(_public_share_id));
         OcsShareJob *job = new OcsShareJob("DELETE", url, _account, this);
-        connect(job, SIGNAL(jobFinished(QVariantMap)), this, SLOT(slotDeleteShareFetched(QVariantMap)));
+        connect(job, SIGNAL(jobFinished(QString)), this, SLOT(slotDeleteShareFetched(QString)));
         job->start();
     }
 }
 
-void ShareDialog::slotCreateShareFetched(const QVariantMap &reply)
+void ShareDialog::slotCreateShareFetched(const QString &reply)
 {
     QString message;
-    int code = getJsonReturnCode(reply, message);
+    int code = checkJsonReturnCode(reply, message);
     _pi_link->stopAnimation();
 
     if (code == 403) {
         // there needs to be a password
         _ui->checkBox_password->setChecked(true);
-        _ui->checkBox_password->setEnabled(false);
-        _ui->checkBox_password->setText(tr("Public sh&aring requires a password"));
+        _ui->checkBox_password->setVisible(false);
+        _ui->checkBox_password->setText(tr("Public sh&aring requires a password:"));
         _ui->lineEdit_password->setFocus();
-        _ui->pushButton_copy->hide();
         _ui->widget_shareLink->show();
 
         slotCheckBoxPasswordClicked();
@@ -457,8 +455,9 @@ void ShareDialog::slotCreateShareFetched(const QVariantMap &reply)
         return;
     }
 
-    _public_share_id = reply.value("ocs").toMap().values("data")[0].toMap().value("id").toULongLong();
-    _ui->pushButton_copy->show();
+    bool success;
+    QVariantMap json = QtJson::parse(reply, success).toMap();
+    _public_share_id = json.value("ocs").toMap().values("data")[0].toMap().value("id").toULongLong();
     getShares();
 }
 
@@ -467,7 +466,7 @@ void ShareDialog::slotCheckBoxPasswordClicked()
     if (_ui->checkBox_password->checkState() == Qt::Checked) {
         _ui->lineEdit_password->show();
         _ui->pushButton_setPassword->show();
-        _ui->lineEdit_password->setPlaceholderText(tr("Password"));
+        _ui->lineEdit_password->setPlaceholderText(tr("Choose a password for the public link"));
         _ui->lineEdit_password->setFocus();
     } else {
         ShareDialog::setPassword(QString());
@@ -499,6 +498,22 @@ void ShareDialog::slotPushButtonCopyLinkPressed()
 {
     QClipboard *clipboard = QApplication::clipboard();
     clipboard->setText(_shareUrl);
+}
+
+int ShareDialog::checkJsonReturnCode(const QString &reply, QString &message)
+{
+    bool success;
+    QVariantMap json = QtJson::parse(reply, success).toMap();
+
+    if (!success) {
+        qDebug() << Q_FUNC_INFO << "Failed to parse reply";
+    }
+
+    //TODO proper checking
+    int code = json.value("ocs").toMap().value("meta").toMap().value("statuscode").toInt();
+    message = json.value("ocs").toMap().value("meta").toMap().value("message").toString();
+
+    return code;
 }
 
 void ShareDialog::setShareCheckBoxTitle(bool haveShares)
@@ -539,7 +554,7 @@ void ShareDialog::displayInfo( const QString& msg )
 bool ShareDialog::uploadExternalFile()
 {
     bool re = false;
-    const QString folderName = QString("ownCloud"); // FIXME: get a proper folder name
+    const QString folderName = QString("Mokapress"); // FIXME: get a proper folder name
 
     Folder *folder = 0;
     Folder::Map folders = FolderMan::instance()->map();
@@ -657,18 +672,12 @@ OcsShareJob::OcsShareJob(const QByteArray &verb, const QUrl &url, AccountPtr acc
   _verb(verb),
   _url(url)
 {
-    _passStatusCodes.append(100);
     setIgnoreCredentialFailure(true);
 }
 
 void OcsShareJob::setPostParams(const QList<QPair<QString, QString> >& postParams)
 {
     _postParams = postParams;
-}
-
-void OcsShareJob::addPassStatusCode(int code)
-{
-    _passStatusCodes.append(code);
 }
 
 void OcsShareJob::start()
@@ -702,23 +711,7 @@ void OcsShareJob::start()
 
 bool OcsShareJob::finished()
 {
-    const QString replyData = reply()->readAll();
-
-    bool success;
-    QVariantMap json = QtJson::parse(replyData, success).toMap();
-    if (!success) {
-        qDebug() << "Could not parse reply to" << _verb << _url << _postParams
-                 << ":" << replyData;
-    }
-
-    QString message;
-    const int statusCode = getJsonReturnCode(json, message);
-    if (!_passStatusCodes.contains(statusCode)) {
-        qDebug() << "Reply to" << _verb << _url << _postParams
-                 << "has unexpected status code:" << statusCode << replyData;
-    }
-
-    emit jobFinished(json);
+    emit jobFinished(reply()->readAll());
     return true;
 }
 

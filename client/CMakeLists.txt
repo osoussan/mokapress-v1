@@ -3,6 +3,9 @@ cmake_policy(VERSION 2.8.0)
 
 project(client)
 
+SET( CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -g" )
+set(CMAKE_MACOSX_RPATH 1)
+
 set(OEM_THEME_DIR "" CACHE STRING "Define directory containing a custom theme")
 if ( EXISTS ${OEM_THEME_DIR}/OEM.cmake )
      include ( ${OEM_THEME_DIR}/OEM.cmake )
@@ -165,13 +168,13 @@ endif()
 find_package(Sphinx)
 find_package(PdfLatex)
 
+
 find_package(SQLite3 3.8.0 REQUIRED)
 # On some OS, we want to use our own, not the system sqlite
 if (USE_OUR_OWN_SQLITE3)
     include_directories(BEFORE ${SQLITE3_INCLUDE_DIR})
 endif()
 
-find_package(ZLIB)
 
 configure_file(config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
 

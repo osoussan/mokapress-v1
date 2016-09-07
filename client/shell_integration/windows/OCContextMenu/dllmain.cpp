@@ -81,7 +81,7 @@ STDAPI DllRegisterServer(void)
 	if (SUCCEEDED(hr))	{
 		// Register the context menu handler. The context menu handler is 
 		// associated with the .cpp file class.
-		hr = OCContextMenuRegHandler::RegisterShellExtContextMenuHandler(L"AllFileSystemObjects", CLSID_FileContextMenuExt, L"OCContextMenuHandler");
+		hr = OCContextMenuRegHandler::RegisterShellExtContextMenuHandler(L"AllFilesystemObjects", CLSID_FileContextMenuExt, L"OCContextMenuHandler");
 	}
 
 	return hr;

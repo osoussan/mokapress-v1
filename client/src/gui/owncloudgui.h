@@ -66,12 +66,15 @@ public slots:
     void slotTrayClicked( QSystemTrayIcon::ActivationReason reason );
     void slotToggleLogBrowser();
     void slotOpenOwnCloud();
+    void slotOpenMyWeb();
     void slotOpenSettingsDialog( bool openSettings );
     void slotHelp();
     void slotOpenPath(const QString& path);
     void slotAccountStateChanged();
     void slotShowShareDialog(const QString &sharePath, const QString &localPath, bool resharingAllowed);
 
+    void slotShowInfoDialog(const QString &infoPath, const QString &localPath);
+    void slotCreateWebPage(const QString &filePath, const QString &localPath);
 private slots:
     void slotDisplayIdle();
 
@@ -93,6 +96,7 @@ private:
     QAction *_actionLogout;
 
     QAction *_actionOpenoC;
+    QAction *_actionOpenMyWeb;
     QAction *_actionSettings;
     QAction *_actionQuota;
     QAction *_actionStatus;

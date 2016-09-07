@@ -66,6 +66,7 @@ public:
     QString ownCloudCertificatePath;
     QString ownCloudCertificatePasswd;
 
+    void connectToUrl();
 public slots:
     void setAuthType(WizardCommon::AuthType type);
     void setRemoteFolder( const QString& );

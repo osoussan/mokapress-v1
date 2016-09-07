@@ -41,6 +41,7 @@ public:
   void setErrorString( const QString& err );
   void setConfigExists(bool config);
 
+  void setAuthType(WizardCommon::AuthType type);
 Q_SIGNALS:
   void connectToOCUrl(const QString&);
 
@@ -53,6 +54,7 @@ private:
   bool _connected;
   bool _checking;
   bool _configExists;
+  bool _authTypeKnown;
   QProgressIndicator* _progressIndi;
   OwncloudWizard* _ocWizard;
 };

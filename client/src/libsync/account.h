@@ -132,11 +132,6 @@ public:
     void setApprovedCerts(const QList<QSslCertificate> certs);
     void addApprovedCerts(const QList<QSslCertificate> certs);
 
-    // Usually when a user explicitly rejects a certificate we don't
-    // ask again. After this call, a dialog will again be shown when
-    // the next unknown certificate is encountered.
-    void resetSslCertErrorState();
-
     // pluggable handler
     void setSslErrorHandler(AbstractSslErrorHandler *handler);
 
@@ -160,7 +155,6 @@ public:
     QString serverVersion();
 
     void clearCookieJar();
-    void lendCookieJarTo(QNetworkAccessManager *guest);
 
     void resetNetworkAccessManager();
     QNetworkAccessManager* networkAccessManager();

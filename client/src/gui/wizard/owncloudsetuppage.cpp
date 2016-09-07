@@ -61,7 +61,6 @@ OwncloudSetupPage::OwncloudSetupPage(QWidget *parent)
 
     setupCustomization();
 
-    slotUrlChanged(QLatin1String("")); // don't jitter UI
     connect(_ui.leUrl, SIGNAL(textChanged(QString)), SLOT(slotUrlChanged(QString)));
     connect(_ui.leUrl, SIGNAL(editingFinished()), SLOT(slotUrlEditFinished()));
 
@@ -116,7 +115,7 @@ void OwncloudSetupPage::slotUrlChanged(const QString& url)
         _ui.leUrl->setText(newUrl);
     }
 
-    if (!url.startsWith(QLatin1String("https://"))) {
+    if (url.startsWith(QLatin1String("http://"))) {
         _ui.urlLabel->setPixmap(QPixmap(Theme::hidpiFileName(":/client/resources/lock-http.png")));
         _ui.urlLabel->setToolTip(tr("This url is NOT secure as it is not encrypted.\n"
                                     "It is not advisable to use it."));
@@ -159,6 +158,7 @@ void OwncloudSetupPage::initializePage()
     if (Theme::instance()->overrideServerUrl().isEmpty()) {
         _ui.leUrl->setFocus();
     } else {
+        _ui.leUrl->setText(Theme::instance()->overrideServerUrl());
         setCommitPage(true);
         // Hack: setCommitPage() changes caption, but after an error this page could still be visible
         setButtonText(QWizard::CommitButton, tr("&Next >"));
@@ -223,6 +223,12 @@ bool OwncloudSetupPage::validatePage()
         emit completeChanged();
         return true;
     }
+}
+
+void OwncloudSetupPage::connectToUrl()
+{
+    emit determineAuthType(Theme::instance()->overrideServerUrl().simplified());
+    emit completeChanged();
 }
 
 void OwncloudSetupPage::setAuthType (WizardCommon::AuthType type)

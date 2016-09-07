@@ -22,9 +22,9 @@
 
 	NSMutableArray* _requestQueue;
 	NSMutableDictionary* _registeredPathes;
-	NSMutableSet* _requestedPaths;
 
 	NSString *_shareMenuTitle;
+	NSString *_webMenuTitle;
 	
 	BOOL _isConnected;
 }
@@ -35,10 +35,12 @@
 
 - (BOOL)isRegisteredPath:(NSString*)path isDirectory:(BOOL)isDir;
 - (void)askOnSocket:(NSString*)path query:(NSString*)verb;
-- (void)askForIcon:(NSString*)path isDirectory:(BOOL)isDir;
+- (NSNumber*)askForIcon:(NSString*)path isDirectory:(BOOL)isDir;
 - (void)menuItemClicked:(NSDictionary*)actionDictionary;
+- (void)menuItemClicked2:(NSDictionary*)actionDictionary;
 - (void)start;
 
 - (NSString*) shareItemTitle;
+- (NSString*) webItemTitle;
 
 @end

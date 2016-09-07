@@ -98,8 +98,6 @@ void RemotePathChecker::workerThreadLoop()
                             ++it;
                         }
                     }
-                    // Assume that we won't need this at this point, UNREGISTER_PATH is rare
-                    _oldCache.clear();
                 }
 				SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATH | SHCNF_FLUSHNOWAIT, responsePath.data(), NULL);
             } else if (StringUtil::begins_with(response, wstring(L"STATUS:")) ||
@@ -117,16 +115,13 @@ void RemotePathChecker::workerThreadLoop()
                 auto responseStatus = response.substr(statusBegin+1, statusEnd - statusBegin-1);
                 auto responsePath = response.substr(statusEnd+1);
                 auto state = _StrToFileState(responseStatus);
-                bool wasAsked = asked.erase(responsePath) > 0;
+                auto erased = asked.erase(responsePath);
 
                 bool changed = false;
                 {   std::unique_lock<std::mutex> lock(_mutex);
-                    bool wasCached = _cache.find(responsePath) != _cache.end();
-                    if (wasAsked || wasCached) {
-                        auto &it = _cache[responsePath];
-                        changed = (it != state);
-                        it = state;
-                    }
+                    auto &it = _cache[responsePath];
+                    changed = (it != state);
+                    it = state;
                 }
                 if (changed) {
                     SHChangeNotify(SHCNE_UPDATEITEM, SHCNF_PATH | SHCNF_FLUSHNOWAIT, responsePath.data(), NULL);
@@ -134,25 +129,20 @@ void RemotePathChecker::workerThreadLoop()
 			}
 			else if (StringUtil::begins_with(response, wstring(L"UPDATE_VIEW"))) {
 				std::unique_lock<std::mutex> lock(_mutex);
-                // Keep the old states to continue having something to display while the new state is
-                // requested from the client, triggered by clearing _cache.
-                _oldCache.insert(_cache.cbegin(), _cache.cend());
-
-                // Swap to make a copy of the cache under the mutex and clear the one stored.
-                std::unordered_map<std::wstring, FileState> cache;
-                swap(cache, _cache);
+                auto cache = _cache; // Make a copy of the cache under the mutex
                 lock.unlock();
-                // Let explorer know about the invalidated cache entries, it will re-request the ones it needs.
-                for (auto it = cache.begin(); it != cache.end(); ++it) {
-                    SHChangeNotify(SHCNE_UPDATEITEM, SHCNF_PATH | SHCNF_FLUSHNOWAIT, it->first.data(), NULL);
-                }
-            }
+				// Request a status for all the items in the cache.
+				for (auto it = cache.begin(); it != cache.end(); ++it) {
+					if (!socket.SendMsg(wstring(L"RETRIEVE_FILE_STATUS:" + it->first + L'\n').data())) {
+						break;
+					}
+				}
+			}
 		}
 
 		if (socket.Event() == INVALID_HANDLE_VALUE) {
 			std::unique_lock<std::mutex> lock(_mutex);
 			_cache.clear();
-            _oldCache.clear();
 			_watchedDirectories.clear();
 			_connected = connected = false;
 		}
@@ -205,17 +195,11 @@ bool RemotePathChecker::IsMonitoredPath(const wchar_t* filePath, int* state)
         return true;
     }
 
-    // Re-request the status while we display what we have in _oldCache
     _pending.push(filePath);
-
-    it = _oldCache.find(path);
-    bool foundInOldCache = it != _oldCache.end();
-    if (foundInOldCache)
-        *state = it->second;
-
     lock.unlock();
     SetEvent(_newQueries);
-    return foundInOldCache;
+    return false;
+
 }
 
 RemotePathChecker::FileState RemotePathChecker::_StrToFileState(const std::wstring &str)

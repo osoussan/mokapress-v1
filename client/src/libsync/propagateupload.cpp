@@ -12,7 +12,6 @@
  * for more details.
  */
 
-#include "config.h"
 #include "propagateupload.h"
 #include "owncloudpropagator_p.h"
 #include "networkjobs.h"
@@ -22,8 +21,6 @@
 #include "utility.h"
 #include "filesystem.h"
 #include "propagatorjobs.h"
-#include "transmissionchecksumvalidator.h"
-
 #include <json.h>
 #include <QNetworkAccessManager>
 #include <QFileInfo>
@@ -33,12 +30,6 @@
 
 #ifdef USE_NEON
 #include "propagator_legacy.h"
-#endif
-
-#if QT_VERSION < QT_VERSION_CHECK(5, 4, 2)
-namespace {
-const char owncloudShouldSoftCancelPropertyName[] = "owncloud-should-soft-cancel";
-}
 #endif
 
 namespace OCC {
@@ -95,17 +86,6 @@ void PUTFileJob::start() {
     connect(reply(), SIGNAL(uploadProgress(qint64,qint64)), this, SIGNAL(uploadProgress(qint64,qint64)));
     connect(this, SIGNAL(networkActivity()), account().data(), SIGNAL(propagatorNetworkActivity()));
 
-    // For Qt versions not including https://codereview.qt-project.org/110150
-    // Also do the runtime check if compiled with an old Qt but running with fixed one.
-    // (workaround disabled on windows and mac because the binaries we ship have patched qt)
-#if QT_VERSION < QT_VERSION_CHECK(4, 8, 7)
-    if (QLatin1String(qVersion()) < QLatin1String("4.8.7"))
-        connect(_device.data(), SIGNAL(wasReset()), this, SLOT(slotSoftAbort()));
-#elif QT_VERSION > QT_VERSION_CHECK(5, 0, 0) && QT_VERSION < QT_VERSION_CHECK(5, 4, 2) && !defined Q_OS_WIN && !defined Q_OS_MAC
-    if (QLatin1String(qVersion()) < QLatin1String("5.4.2"))
-        connect(_device.data(), SIGNAL(wasReset()), this, SLOT(slotSoftAbort()));
-#endif
-
     AbstractNetworkJob::start();
 }
 
@@ -113,13 +93,6 @@ void PUTFileJob::slotTimeout() {
     _errorString =  tr("Connection Timeout");
     reply()->abort();
 }
-
-#if QT_VERSION < QT_VERSION_CHECK(5, 4, 2)
-void PUTFileJob::slotSoftAbort() {
-    reply()->setProperty(owncloudShouldSoftCancelPropertyName, true);
-    reply()->abort();
-}
-#endif
 
 void PollJob::start()
 {
@@ -194,51 +167,22 @@ bool PollJob::finished()
     return true;
 }
 
+
 void PropagateUploadFileQNAM::start()
 {
     if (_propagator->_abortRequested.fetchAndAddRelaxed(0)) {
         return;
     }
 
-    const QString filePath = _propagator->getFilePath(_item._file);
-
-    // remember the modtime before checksumming to be able to detect a file
-    // change during the checksum calculation
-    _item._modtime = FileSystem::getModTime(filePath);
-
-    _stopWatch.start();
-
-    // do whatever is needed to add a checksum to the http upload request.
-    // in any case, the validator will emit signal startUpload to let the flow
-    // continue in slotStartUpload here.
-    TransmissionChecksumValidator *validator = new TransmissionChecksumValidator(filePath, this);
-    connect(validator, SIGNAL(validated(QByteArray)), this, SLOT(slotStartUpload(QByteArray)));
-    validator->uploadValidation();
-}
-
-void PropagateUploadFileQNAM::slotStartUpload(const QByteArray& checksum)
-{
     const QString fullFilePath(_propagator->getFilePath(_item._file));
-
-    _item._checksum = checksum;
 
     if (!FileSystem::fileExists(fullFilePath)) {
         done(SyncFileItem::SoftError, tr("File Removed"));
         return;
     }
-    _stopWatch.addLapTime(QLatin1String("Checksum"));
 
-    time_t prevModtime = _item._modtime; // the _item value was set in PropagateUploadFileQNAM::start()
-    // but a potential checksum calculation could have taken some time during which the file could
-    // have been changed again, so better check again here.
-
+    // Update the mtime and size, it might have changed since discovery.
     _item._modtime = FileSystem::getModTime(fullFilePath);
-    if( prevModtime != _item._modtime ) {
-        _propagator->_anotherSyncNeeded = true;
-        done(SyncFileItem::SoftError, tr("Local file changed during syncing. It will be resumed."));
-        return;
-    }
-
     quint64 fileSize = FileSystem::getSize(fullFilePath);
     _item._size = fileSize;
 
@@ -425,18 +369,6 @@ void PropagateUploadFileQNAM::startNextChunk()
     headers["OC-Chunk-Size"]= QByteArray::number(quint64(chunkSize()));
     headers["Content-Type"] = "application/octet-stream";
     headers["X-OC-Mtime"] = QByteArray::number(qint64(_item._modtime));
-
-    if(_item._file.contains(".sys.admin#recall#")) {
-        // This is a file recall triggered by the admin.  Note: the
-        // recall list file created by the admin and downloaded by the
-        // client (.sys.admin#recall#) also falls into this category
-        // (albeit users are not supposed to mess up with it)
-
-        // We use a special tag header so that the server may decide to store this file away in some admin stage area
-        // And not directly in the user's area (what would trigger redownloads etc).
-        headers["OC-Tag"] = ".sys.admin#recall#";
-    }
-
     if (!_item._etag.isEmpty() && _item._etag != "empty_etag" &&
             _item._instruction != CSYNC_INSTRUCTION_NEW  // On new files never send a If-Match
             ) {
@@ -465,14 +397,6 @@ void PropagateUploadFileQNAM::startNextChunk()
             if( currentChunkSize == 0 ) { // if the last chunk pretents to be 0, its actually the full chunk size.
                 currentChunkSize = chunkSize();
             }
-            if( !_item._checksum.isEmpty() ) {
-                headers[checkSumHeaderC] = _item._checksum;
-            }
-        }
-    } else {
-        // checksum if its only one chunk
-        if( !_item._checksum.isEmpty() ) {
-            headers[checkSumHeaderC] = _item._checksum;
         }
     }
 
@@ -547,18 +471,6 @@ void PropagateUploadFileQNAM::slotPutFinished()
     }
 
     QNetworkReply::NetworkError err = job->reply()->error();
-
-#if QT_VERSION < QT_VERSION_CHECK(5, 4, 2)
-    if (err == QNetworkReply::OperationCanceledError && job->reply()->property(owncloudShouldSoftCancelPropertyName).isValid()) {
-        // Abort the job and try again later.
-        // This works around a bug in QNAM wich might reuse a non-empty buffer for the next request.
-        qDebug() << "Forcing job abort on HTTP connection reset with Qt < 5.4.2.";
-        _propagator->_anotherSyncNeeded = true;
-        done(SyncFileItem::SoftError, tr("Forcing job abort on HTTP connection reset with Qt < 5.4.2."));
-        return;
-    }
-#endif
-
     if (err != QNetworkReply::NoError) {
         _item._httpErrorCode = job->reply()->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         if(checkForProblemsWithShared(_item._httpErrorCode,
@@ -566,9 +478,14 @@ void PropagateUploadFileQNAM::slotPutFinished()
                "It is restored and your edit is in the conflict file."))) {
             return;
         }
+        QString errorString = job->errorString();
+
         QByteArray replyContent = job->reply()->readAll();
         qDebug() << replyContent; // display the XML error in the debug
-        QString errorString = errorMessage(job->errorString(), replyContent);
+        QRegExp rx("<s:message>(.*)</s:message>"); // Issue #1366: display server exception
+        if (rx.indexIn(QString::fromUtf8(replyContent)) != -1) {
+            errorString += QLatin1String(" (") + rx.cap(1) + QLatin1Char(')');
+        }
 
         if (job->reply()->hasRawHeader("OC-ErrorString")) {
             errorString = job->reply()->rawHeader("OC-ErrorString");
@@ -621,8 +538,15 @@ void PropagateUploadFileQNAM::slotPutFinished()
         }
     }
 
-    // Check whether the file changed since discovery.
-    if (! FileSystem::verifyFileUnchanged(fullFilePath, _item._size, _item._modtime)) {
+    // compare expected and real modification time of the file and size
+    const time_t new_mtime = FileSystem::getModTime(fullFilePath);
+    const quint64 new_size = static_cast<quint64>(FileSystem::getSize(fullFilePath));
+    QFileInfo fi(_propagator->getFilePath(_item._file));
+    if (new_mtime != _item._modtime || new_size != _item._size) {
+        qDebug() << "The local file has changed during upload:"
+                 << "mtime: " << _item._modtime << "<->" << new_mtime
+                 << ", size: " << _item._size << "<->" << new_size
+                 << ", QFileInfo: " << Utility::qDateTimeToTime_t(fi.lastModified()) << fi.lastModified();
         _propagator->_anotherSyncNeeded = true;
         if( !finished ) {
             abortWithError(SyncFileItem::SoftError, tr("Local file changed during sync."));
@@ -688,11 +612,6 @@ void PropagateUploadFileQNAM::slotPutFinished()
         // Well, the mtime was not set
 #endif
     }
-
-    // performance logging
-    _item._requestDuration = _stopWatch.stop();
-    qDebug() << "*==* duration UPLOAD" << _item._size << _stopWatch.durationOfLap(QLatin1String("Checksum")) << _item._requestDuration;
-
     finalize(_item);
 }
 

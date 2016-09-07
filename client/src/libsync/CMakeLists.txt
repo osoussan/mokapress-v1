@@ -61,7 +61,6 @@ set(libsync_SRCS
     theme.cpp
     utility.cpp
     ownsql.cpp
-    transmissionchecksumvalidator.cpp
     creds/dummycredentials.cpp
     creds/abstractcredentials.cpp
     creds/credentialsfactory.cpp
@@ -142,11 +141,6 @@ if(NEON_FOUND)
     endif()
 endif()
 
-if(ZLIB_FOUND)
-    list(APPEND libsync_LINK_TARGETS ${ZLIB_LIBRARIES})
-    include_directories(${ZLIB_INCLUDE_DIRS})
-endif(ZLIB_FOUND)
-
 add_library(${synclib_NAME} SHARED ${libsync_SRCS} ${syncMoc})
 GENERATE_EXPORT_HEADER( ${synclib_NAME}
 	BASE_NAME ${synclib_NAME}
@@ -157,9 +151,9 @@ GENERATE_EXPORT_HEADER( ${synclib_NAME}
 
 
 if(TOKEN_AUTH_ONLY)
-    qt5_use_modules(${synclib_NAME} Network Concurrent)
+    qt5_use_modules(${synclib_NAME} Network)
 else()
-    qt5_use_modules(${synclib_NAME} Widgets Network WebKitWidgets Concurrent)
+    qt5_use_modules(${synclib_NAME} Widgets Network WebKitWidgets)
 endif()
 
 set_target_properties( ${synclib_NAME}  PROPERTIES
@@ -168,7 +162,7 @@ set_target_properties( ${synclib_NAME}  PROPERTIES
 	RUNTIME_OUTPUT_DIRECTORY ${BIN_OUTPUT_DIRECTORY}
 )
 set_target_properties( ${synclib_NAME} PROPERTIES
-	INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${LIB_INSTALL_DIR}/${APPLICATION_EXECUTABLE}" )
+	INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${LIB_INSTALL_DIR}" )
 
 target_link_libraries(${synclib_NAME} ${libsync_LINK_TARGETS} )
 

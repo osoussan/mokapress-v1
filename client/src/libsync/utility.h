@@ -105,7 +105,7 @@ namespace Utility
         QElapsedTimer _timer;
     public:
         void start();
-        quint64 stop();
+        void stop();
         quint64 addLapTime( const QString& lapName );
         void reset();
 

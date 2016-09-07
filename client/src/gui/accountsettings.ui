@@ -40,9 +40,6 @@
           <property name="text">
            <string>Connected with &lt;server&gt; as &lt;user&gt;</string>
           </property>
-          <property name="openExternalLinks">
-           <bool>true</bool>
-          </property>
          </widget>
         </item>
        </layout>
@@ -52,13 +49,6 @@
       </item>
       <item row="1" column="1">
        <layout class="QVBoxLayout" name="verticalLayout_2">
-        <item>
-         <widget class="QPushButton" name="_buttonAdd">
-          <property name="text">
-           <string>Add Folder...</string>
-          </property>
-         </widget>
-        </item>
         <item>
          <widget class="QPushButton" name="_buttonEnable">
           <property name="text">
@@ -70,13 +60,6 @@
          <widget class="QPushButton" name="_buttonRemove">
           <property name="text">
            <string>Remove</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QPushButton" name="_buttonSelectiveSync">
-          <property name="text">
-           <string>Choose What to Sync</string>
           </property>
          </widget>
         </item>
@@ -146,16 +129,6 @@
       <string>Account Maintenance</string>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_3">
-      <item>
-       <widget class="QPushButton" name="ignoredFilesButton">
-        <property name="enabled">
-         <bool>true</bool>
-        </property>
-        <property name="text">
-         <string>Edit Ignored Files</string>
-        </property>
-       </widget>
-      </item>
       <item>
        <widget class="QPushButton" name="modifyAccountButton">
         <property name="text">

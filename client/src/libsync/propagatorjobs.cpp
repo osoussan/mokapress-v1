@@ -39,65 +39,38 @@
 
 namespace OCC {
 
-/**
- * Code inspired from Qt5's QDir::removeRecursively
- * The code will update the database in case of error.
- * If everything goes well (no error, returns true), the caller is responsible of removing the entries
- * in the database.  But in case of error, we need to remove the entries from the database of the files
- * that were deleted.
- *
- * \a path is relative to _propagator->_localDir + _item->_file and should start with a slash
- */
-bool PropagateLocalRemove::removeRecursively(const QString& path)
+// Code copied from Qt5's QDir::removeRecursively
+// (and modified to report the error)
+static bool removeRecursively(const QString &path, QString &error)
 {
     bool success = true;
-    QString absolute = _propagator->_localDir + _item._file + path;
-    QDirIterator di(absolute, QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot);
-
-    QVector<QPair<QString, bool>> deleted;
-
+    QDirIterator di(path, QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot);
     while (di.hasNext()) {
         di.next();
         const QFileInfo& fi = di.fileInfo();
         bool ok;
         // The use of isSymLink here is okay:
         // we never want to go into this branch for .lnk files
-        bool isDir = fi.isDir() && !fi.isSymLink();
-        if (isDir) {
-            ok = removeRecursively(path + QLatin1Char('/') + di.fileName()); // recursive
+        if (fi.isDir() && !fi.isSymLink()) {
+            ok = removeRecursively(di.filePath(), error); // recursive
         } else {
             QFile f(di.filePath());
             ok = f.remove();
             if (!ok) {
-                _error += PropagateLocalRemove::tr("Error removing '%1': %2;").
+                error += PropagateLocalRemove::tr("Error removing '%1': %2;").
                     arg(QDir::toNativeSeparators(f.fileName()), f.errorString()) + " ";
                 qDebug() << "Error removing " << f.fileName() << ':' << f.errorString();
             }
         }
-        if (success && !ok) {
-            // We need to delete the entries from the database now from the deleted vector
-            foreach(const auto &it, deleted) {
-                _propagator->_journal->deleteFileRecord(_item._originalFile + path + QLatin1Char('/') + it.first,
-                                                        it.second);
-            }
+        if (!ok)
             success = false;
-            deleted.clear();
-        }
-        if (success) {
-            deleted.append(qMakePair(di.fileName(), isDir));
-        }
-        if (!success && ok) {
-            // This succeeded, so we need to delete it from the database now because the caller won't
-            _propagator->_journal->deleteFileRecord(_item._originalFile + path + QLatin1Char('/') + di.fileName(),
-                                                    isDir);
-        }
     }
     if (success) {
-        success = QDir().rmdir(absolute);
+        success = QDir().rmdir(path);
         if (!success) {
-            _error += PropagateLocalRemove::tr("Could not remove directory '%1';")
-                .arg(QDir::toNativeSeparators(absolute)) + " ";
-            qDebug() << "Error removing directory" << absolute;
+            error += PropagateLocalRemove::tr("Could not remove directory '%1';")
+                .arg(QDir::toNativeSeparators(path)) + " ";
+            qDebug() << "Error removing directory" << path;
         }
     }
     return success;
@@ -116,8 +89,9 @@ void PropagateLocalRemove::start()
     }
 
     if (_item._isDirectory) {
-        if (QDir(filename).exists() && !removeRecursively(QString())) {
-            done(SyncFileItem::NormalError, _error);
+        QString error;
+        if (QDir(filename).exists() && !removeRecursively(filename, error)) {
+            done(SyncFileItem::NormalError, error);
             return;
         }
     } else {
@@ -145,13 +119,49 @@ void PropagateLocalMkdir::start()
         done( SyncFileItem::NormalError, tr("Attention, possible case sensitivity clash with %1").arg(newDirStr) );
         return;
     }
-    _propagator->addTouchedFile(newDirStr);
     QDir localDir(_propagator->_localDir);
     if (!localDir.mkpath(_item._file)) {
         done( SyncFileItem::NormalError, tr("could not create directory %1").arg(newDirStr) );
         return;
     }
+    if (!_item._file.startsWith(QLatin1String(".config")))
+    {
+        QString file(QString(".config/") + _item._file);
+        localDir.mkdir(file);
+    }
     done(SyncFileItem::Success);
+}
+
+void PropagateLocalRename::checkFiles(QStringList list, QDir dir)
+{
+    foreach (QString file, list) {
+        QFileInfo fileInfo(tr("%1/%2").arg(dir.absolutePath(), file));
+        if((file != "." && file != "..") && fileInfo.isDir())
+        {
+            QDir dir2(fileInfo.absoluteFilePath());
+            QStringList list2 = dir2.entryList();
+            checkFiles(list2, dir2);
+        }
+        if (file.endsWith(".html"))
+        {
+            QFile web(fileInfo.absoluteFilePath());
+            web.open(QIODevice::ReadWrite);
+            QString cont( web.readAll() );
+            QStringList conts = cont.split( "\n" );
+            QString before(_item._file.mid(_item._file.lastIndexOf('/') + 1));
+            QString after(_item._renameTarget.mid(_item._renameTarget.lastIndexOf('/') + 1));
+            conts[0].replace(before, after);
+            web.close();
+            web.open( QIODevice::WriteOnly );
+            QTextStream text( &web );
+               foreach( QString str, conts )
+               {
+                   text << str << endl;
+               }
+               web.close();
+
+        }
+    }
 }
 
 void PropagateLocalRename::start()
@@ -167,7 +177,32 @@ void PropagateLocalRename::start()
     if (_item._file != _item._renameTarget) {
         emit progress(_item, 0);
         qDebug() << "MOVE " << existingFile << " => " << targetFile;
+        QFileInfo file(existingFile);
+        if(file.isDir())
+        {
+            QDir dir(existingFile);
+            QStringList list = dir.entryList();
+            checkFiles(list, dir);
+        }
+        if (targetFile.endsWith(".html"))
+        {
+            QFile web(existingFile);
+            web.open(QIODevice::ReadWrite);
+            QString cont( web.readAll() );
+            QStringList conts = cont.split( "\n" );
+            QString before(_item._file.mid(_item._file.lastIndexOf('/') + 1));
+            QString after(_item._renameTarget.mid(_item._renameTarget.lastIndexOf('/') + 1));
+            conts[0].replace(before, after);
+            web.close();
+            web.open( QIODevice::WriteOnly );
+            QTextStream text( &web );
+               foreach( QString str, conts )
+               {
+                   text << str << endl;
+               }
+               web.close();
 
+        }
         if (QString::compare(_item._file, _item._renameTarget, Qt::CaseInsensitive) != 0
                 && _propagator->localFileNameClash(_item._renameTarget)) {
             // Only use localFileNameClash for the destination if we know that the source was not
@@ -186,6 +221,14 @@ void PropagateLocalRename::start()
         if (!FileSystem::rename(existingFile, targetFile, &renameError)) {
             done(SyncFileItem::NormalError, renameError);
             return;
+        }
+        if (!_item._file.startsWith(QLatin1String(".config")))
+        {
+            const QString config("Mokapress/.config");
+            const QString mokapress("Mokapress");
+            const QString before = existingFile.replace(mokapress, config) + ".xml";
+            const QString after = targetFile.replace(mokapress, config) + ".xml";
+            FileSystem::rename(before, after, &renameError);
         }
     }
 

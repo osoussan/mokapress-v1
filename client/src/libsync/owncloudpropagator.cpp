@@ -259,21 +259,6 @@ void OwncloudPropagator::start(const SyncFileItemVector& items)
 {
     Q_ASSERT(std::is_sorted(items.begin(), items.end()));
 
-    /* Check and log the transmission checksum type */
-    ConfigFile cfg;
-    const QString checksumType = cfg.transmissionChecksum().toUpper();
-
-    /* if the checksum type is empty, it is not send. No error */
-    if( !checksumType.isEmpty() ) {
-        if( checksumType == checkSumAdlerUpperC ||
-                checksumType == checkSumMD5C    ||
-                checksumType == checkSumSHA1C ) {
-            qDebug() << "Client sends and expects transmission checksum type" << checksumType;
-        } else {
-            qWarning() << "Unknown transmission checksum type from config" << checksumType;
-        }
-    }
-
     /* This builds all the job needed for the propagation.
      * Each directories is a PropagateDirectory job, which contains the files in it.
      * In order to do that we loop over the items. (which are sorted by destination)
@@ -664,10 +649,10 @@ void CleanupPollsJob::start()
 
     auto info = _pollInfos.first();
     _pollInfos.pop_front();
-    _item = SyncFileItem();
-    _item._file = info._file;
-    _item._modtime = info._modtime;
-    PollJob *job = new PollJob(_account, info._url, _item, _journal, _localPath, this);
+    SyncFileItem item;
+    item._file = info._file;
+    item._modtime = info._modtime;
+    PollJob *job = new PollJob(_account, info._url, item, _journal, _localPath, this);
     connect(job, SIGNAL(finishedSignal()), SLOT(slotPollFinished()));
     job->start();
 }
